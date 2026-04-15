@@ -1,0 +1,52 @@
+{
+  "name": "ea-nexus",
+  "version": "0.3.5",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Lightblues/easons_agent.git",
+    "directory": "packages/nexus"
+  },
+  "description": "EA Nexus - macOS Menu Bar Agent",
+  "main": "./out/main/index.js",
+  "author": "Eason",
+  "license": "MIT",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "postinstall": "electron-builder install-app-deps",
+    "build:mac": "npm run build && electron-builder --mac --arm64",
+    "build:mac:all": "npm run build && electron-builder --mac"
+  },
+  "dependencies": {
+    "@monaco-editor/react": "^4.6.0",
+    "@octokit/rest": "^20.0.0",
+    "electron-log": "^5.2.4",
+    "electron-store": "^10.0.0",
+    "get-windows": "^9.2.3",
+    "js-yaml": "^4.1.0",
+    "node-mac-permissions": "^2.5.0",
+    "react-activity-calendar": "^3.0.5",
+    "recharts": "^3.6.0",
+    "sharp": "^0.33.0",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "@electron-toolkit/preload": "^3.0.1",
+    "@electron-toolkit/tsconfig": "^1.0.1",
+    "@electron-toolkit/utils": "^3.0.0",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^20.17.10",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@types/uuid": "^9.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^2.3.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "typescript": "^5.7.2",
+    "vite": "^5.4.11"
+  }
+}

@@ -1,0 +1,30 @@
+# EA Nexus Configuration
+pomodoro:
+  workDuration: 25        # minutes
+  shortBreakDuration: 5   # minutes
+  longBreakDuration: 15   # minutes
+  sessionsBeforeLongBreak: 4
+
+  # Projects and tags (add your own)
+  projects:
+    - name: default
+      color: "#3B82F6"
+  tags:
+    - work
+    - study
+    - personal
+  
+  showPopoverOnComplete: false
+
+ui:
+  windowWidth: 320
+  windowHeight: 400
+
+tracker:
+  enabled: true
+  pollInterval: 5          # seconds between polls
+  idleThreshold: 120       # seconds before considered idle
+  recordTitle: false       # privacy: don't record window titles
+  enrichApps:              # apps to extract extra context from
+    - Code
+    - Google Chrome

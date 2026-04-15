@@ -1,0 +1,37 @@
+appId: com.ea.nexus
+productName: EA Nexus
+directories:
+  buildResources: build
+  output: dist
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!electron.vite.config.*'
+  - '!{.eslintrc,.prettierrc,tsconfig*.json}'
+  - '!{*.md}'
+mac:
+  icon: build/icon.png
+  entitlementsInherit: build/entitlements.mac.plist
+  extendInfo:
+    - NSDocumentsFolderUsageDescription: Application needs to access Documents folder.
+    - NSDownloadsFolderUsageDescription: Application needs to access Downloads folder.
+  notarize: false
+  target:
+    - target: dmg
+      arch:
+        - arm64
+        - x64
+  type: distribution
+  category: public.app-category.productivity
+  artifactName: '${productName}-${version}-${arch}.${ext}'
+dmg:
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+  window:
+    width: 540
+    height: 380
