@@ -15,7 +15,10 @@ const DEFAULT_CONFIG: AppConfig = {
     sessionsBeforeLongBreak: 4,
     projects: [{ name: 'default', color: '#3B82F6' }],
     tags: ['work', 'study', 'personal'],
-    showPopoverOnComplete: true
+    showPopoverOnComplete: true,
+    autoStartBreak: true,
+    autoStartBreakDelay: 3,
+    confettiOnComplete: true
   },
   ui: {
     windowWidth: 320,
