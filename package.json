@@ -11,19 +11,32 @@
   "author": "Eason",
   "license": "MIT",
   "scripts": {
+    "preinstall": "npx only-allow pnpm",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "postinstall": "electron-builder install-app-deps",
-    "build:mac": "npm run build && electron-builder --mac --arm64",
-    "build:mac:all": "npm run build && electron-builder --mac"
+    "build:mac": "pnpm build && electron-builder --mac --arm64",
+    "build:mac:all": "pnpm build && electron-builder --mac"
+  },
+  "engines": {
+    "node": ">=18",
+    "pnpm": ">=9"
+  },
+  "packageManager": "pnpm@10.12.1",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "esbuild",
+      "sharp",
+      "node-mac-permissions"
+    ]
   },
   "dependencies": {
     "@monaco-editor/react": "^4.6.0",
     "@octokit/rest": "^20.0.0",
     "electron-log": "^5.2.4",
     "electron-store": "^10.0.0",
-    "get-windows": "^9.2.3",
     "js-yaml": "^4.1.0",
     "node-mac-permissions": "^2.5.0",
     "react-activity-calendar": "^3.0.5",
