@@ -1,4 +1,6 @@
-export { pomodoroService, type PomodoroStatus, type PomodoroSession, type TimerState, type SessionType } from './PomodoroService'
+export { pomodoroService } from './PomodoroService'
+export type { PomodoroStatus, PomodoroSession, TimerState, SessionType, NextActionOption } from './PomodoroService'
 export { registerPomodoroIPC } from './pomodoro.ipc'
-export { statsService, type DailyStats, type WeeklyStats, type ActivityData, type TimelineSegment } from './StatsService'
+export { statsService } from './StatsService'
+export type { DailyStats, WeeklyStats, ActivityData, TimelineSegment } from './StatsService'
 export { registerStatsIPC } from './stats.ipc'

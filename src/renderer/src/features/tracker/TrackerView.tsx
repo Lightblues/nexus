@@ -3,29 +3,7 @@ import { Card } from '../../components'
 import TrackerTimeline from './TrackerTimeline'
 import AppUsageChart from './AppUsageChart'
 import AppRankList from './AppRankList'
-
-interface ActivityContext {
-  project?: string
-  file?: string
-  domain?: string
-}
-
-interface WindowActivityRecord {
-  startTime: string
-  endTime: string
-  duration: number
-  app: string
-  context?: ActivityContext
-}
-
-interface DailyTrackerData {
-  date: string
-  records: WindowActivityRecord[]
-  meta: {
-    totalActiveTime: number
-    appSummary: Record<string, number>
-  }
-}
+import type { ActivityContext, DailyTrackerData, TrackerStatus } from '@shared/types'
 
 interface TrackerTimelineSegment {
   startTime: string
@@ -35,7 +13,7 @@ interface TrackerTimelineSegment {
   context?: ActivityContext
 }
 
-interface AppSummaryEntry {
+interface AppSummaryEntryLocal {
   app: string
   duration: number
   percentage: number
@@ -52,7 +30,7 @@ function transformToTimelineSegments(data: DailyTrackerData): TrackerTimelineSeg
   }))
 }
 
-function transformToAppSummary(data: DailyTrackerData): AppSummaryEntry[] {
+function transformToAppSummary(data: DailyTrackerData): AppSummaryEntryLocal[] {
   const total = data.meta.totalActiveTime || 1
   const entries = Object.entries(data.meta.appSummary)
     .map(([app, duration]) => ({
@@ -82,12 +60,6 @@ function transformToAppSummary(data: DailyTrackerData): AppSummaryEntry[] {
       : undefined
     return { ...entry, contexts }
   })
-}
-
-interface TrackerStatus {
-  enabled: boolean
-  running: boolean
-  permissionGranted: boolean
 }
 
 export default function TrackerView() {

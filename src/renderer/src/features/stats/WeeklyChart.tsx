@@ -1,10 +1,5 @@
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
-
-interface DailyStats {
-  date: string
-  totalSessions: number
-  totalMinutes: number
-}
+import type { DailyStats } from '@shared/types'
 
 interface WeeklyChartProps {
   data: DailyStats[]

@@ -1,218 +1,29 @@
 /// <reference types="vite/client" />
 
-interface PomodoroSession {
-  type: 'work' | 'shortBreak' | 'longBreak'
-  project?: string
-  tags?: string[]
-  task?: string
-}
-
-interface PomodoroStatus {
-  state: 'idle' | 'running' | 'paused' | 'finished'
-  sessionType: 'work' | 'shortBreak' | 'longBreak'
-  remainingSeconds: number
-  totalSeconds: number
-  completedSessions: number
-  currentSession?: PomodoroSession
-}
-
-interface PomodoroStats {
-  totalSessions: number
-  history: unknown[]
-}
-
-interface DailyStats {
-  date: string
-  totalSessions: number
-  totalMinutes: number
-  sessions: unknown[]
-}
-
-interface WeeklyStats {
-  days: DailyStats[]
-  totalSessions: number
-  totalMinutes: number
-}
-
-interface ActivityData {
-  date: string
-  count: number
-  level: 0 | 1 | 2 | 3 | 4
-}
-
-interface TimelineSegment {
-  startTime: string
-  endTime: string
-  type: 'work' | 'shortBreak' | 'longBreak'
-  duration: number
-  project?: string
-}
-
-interface SessionRecord {
-  id: string
-  startTime: string
-  endTime: string
-  duration: number
-  type: 'work' | 'shortBreak' | 'longBreak'
-  completionType: 'normal' | 'early' | 'skipped'
-  project?: string
-  tags?: string[]
-  task?: string
-}
-
-interface SessionUpdate {
-  id: string
-  startTime?: string
-  endTime?: string
-  project?: string
-  tags?: string[]
-  task?: string
-}
-
-interface NextActionOption {
-  action: 'startBreak' | 'startWork' | 'exit'
-  label: string
-  sessionType?: 'work' | 'shortBreak' | 'longBreak'
-}
-
-interface LastSessionInfo {
-  project?: string
-  tags?: string[]
-  task?: string
-}
-
-interface TrackerConfig {
-  enabled: boolean
-  pollInterval: number
-  idleThreshold: number
-  recordTitle: boolean
-  enrichApps: string[]
-}
-
-interface AppConfig {
-  pomodoro: {
-    workDuration: number
-    shortBreakDuration: number
-    longBreakDuration: number
-    sessionsBeforeLongBreak: number
-    projects: Array<{ name: string; color: string }>
-    tags: string[]
-  }
-  ui: {
-    windowWidth: number
-    windowHeight: number
-  }
-  tracker: TrackerConfig
-}
-
-interface TrackerStatus {
-  enabled: boolean
-  running: boolean
-  permissionGranted: boolean
-}
-
-interface ActivityContext {
-  project?: string
-  file?: string
-  url?: string
-  domain?: string
-  rawTitle?: string
-}
-
-interface WindowActivityRecord {
-  startTime: string
-  endTime: string
-  duration: number
-  app: string
-  bundleId?: string
-  title?: string
-  context?: ActivityContext
-}
-
-interface DailyTrackerData {
-  date: string
-  version: 1
-  records: WindowActivityRecord[]
-  meta: {
-    totalActiveTime: number
-    appSummary: Record<string, number>
-  }
-}
-
-interface AppSummaryEntry {
-  app: string
-  duration: number
-  percentage: number
-}
-
-interface ValidationResult {
-  valid: boolean
-  error?: string
-}
-
-interface WriteResult {
-  success: boolean
-  error?: string
-}
-
-interface UploaderConfig {
-  enabled: boolean
-  github: {
-    token: string
-    owner: string
-    repo: string
-    branch: string
-  }
-  cdn: {
-    baseUrl: string
-  }
-  compress: {
-    quality: number
-    defaultFormat: 'auto' | 'webp' | 'jpeg' | 'png'
-  }
-  defaultPath: string
-  cacheThumbnails: boolean
-}
-
-interface ImageMeta {
-  buffer: number[]
-  format: 'png' | 'jpeg' | 'webp' | 'gif'
-  width: number
-  height: number
-  size: number
-}
-
-interface CompressResult {
-  buffer: number[]
-  originalSize: number
-  compressedSize: number
-  width: number
-  height: number
-  outputFormat?: string
-}
-
-interface UploadRecord {
-  id: string
-  filename: string
-  originalName: string
-  timestamp: string
-  originalSize: number
-  compressedSize: number
-  width: number
-  height: number
-  format: 'png' | 'jpeg' | 'webp' | 'gif'
-  path: string
-  cdnUrl: string
-  sha: string
-}
-
-interface UploadResult {
-  success: boolean
-  cdnUrl?: string
-  sha?: string
-  error?: string
-  record?: UploadRecord
-}
+import type {
+  PomodoroSession,
+  PomodoroStatus,
+  PomodoroStats,
+  DailyStats,
+  WeeklyStats,
+  ActivityData,
+  TimelineSegment,
+  SessionRecord,
+  SessionUpdate,
+  NextActionOption,
+  LastSessionInfo,
+  AppConfig,
+  TrackerStatus,
+  DailyTrackerData,
+  AppSummaryEntry,
+  ValidationResult,
+  WriteResult,
+  UploaderConfig,
+  ImageMeta,
+  CompressResult,
+  UploadRecord,
+  UploadResult
+} from '@shared/types'
 
 interface WindowApi {
   pomodoro: {
@@ -232,9 +43,9 @@ interface WindowApi {
     getTags: () => Promise<string[]>
     addTag: (tag: string) => Promise<string[]>
     getLastSession: () => Promise<LastSessionInfo>
-    onTick: (callback: (seconds: number) => void) => void
-    onStatus: (callback: (status: PomodoroStatus) => void) => void
-    onFinished: (callback: (sessionType: string) => void) => void
+    onTick: (callback: (seconds: number) => void) => () => void
+    onStatus: (callback: (status: PomodoroStatus) => void) => () => void
+    onFinished: (callback: (sessionType: string) => void) => () => void
   }
   config: {
     get: () => Promise<AppConfig>
@@ -277,7 +88,7 @@ interface WindowApi {
     getRecentPaths: () => Promise<string[]>
     copyUrl: (url: string) => Promise<{ success: boolean }>
     getThumbnail: (id: string) => Promise<number[] | null>
-    onImageDropped: (callback: (data: { buffer: number[]; filename: string }) => void) => void
+    onImageDropped: (callback: (data: { buffer: number[]; filename: string }) => void) => () => void
   }
 }
 

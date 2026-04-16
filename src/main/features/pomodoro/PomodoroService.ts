@@ -1,30 +1,11 @@
 import { EventEmitter } from 'events'
-import { configManager, dataManager, logger, trayManager, type SessionRecord } from '../../core'
+import { configManager, dataManager, logger, trayManager } from '../../core'
+import type {
+  TimerState, SessionType, PomodoroSession, PomodoroStatus,
+  NextActionOption, SessionRecord
+} from '@shared/types'
 
-export type TimerState = 'idle' | 'running' | 'paused' | 'finished'
-export type SessionType = 'work' | 'shortBreak' | 'longBreak'
-
-export interface PomodoroSession {
-  type: SessionType
-  project?: string
-  tags?: string[]
-  task?: string
-}
-
-export interface PomodoroStatus {
-  state: TimerState
-  sessionType: SessionType
-  remainingSeconds: number
-  totalSeconds: number
-  completedSessions: number
-  currentSession?: PomodoroSession
-}
-
-export interface NextActionOption {
-  action: 'startBreak' | 'startWork' | 'exit'
-  label: string
-  sessionType?: SessionType
-}
+export type { TimerState, SessionType, PomodoroSession, PomodoroStatus, NextActionOption }
 
 class PomodoroService extends EventEmitter {
   private state: TimerState = 'idle'

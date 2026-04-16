@@ -1,12 +1,5 @@
 import { useState } from 'react'
-
-interface TimelineSegment {
-  startTime: string
-  endTime: string
-  type: 'work' | 'shortBreak' | 'longBreak'
-  duration: number
-  project?: string
-}
+import type { TimelineSegment } from '@shared/types'
 
 interface DailyTimelineProps {
   data: TimelineSegment[]

@@ -1,31 +1,7 @@
-import { dataManager, type SessionRecord } from '../../core'
+import { dataManager } from '../../core'
+import type { SessionRecord, DailyStats, WeeklyStats, ActivityData, TimelineSegment } from '@shared/types'
 
-export interface DailyStats {
-  date: string
-  totalSessions: number
-  totalMinutes: number
-  sessions: SessionRecord[]
-}
-
-export interface WeeklyStats {
-  days: DailyStats[]
-  totalSessions: number
-  totalMinutes: number
-}
-
-export interface ActivityData {
-  date: string
-  count: number
-  level: 0 | 1 | 2 | 3 | 4
-}
-
-export interface TimelineSegment {
-  startTime: string
-  endTime: string
-  type: 'work' | 'shortBreak' | 'longBreak'
-  duration: number
-  project?: string
-}
+export type { DailyStats, WeeklyStats, ActivityData, TimelineSegment }
 
 class StatsService {
   private formatDate(date: Date): string {
@@ -36,13 +12,20 @@ class StatsService {
     return date.toTimeString().slice(0, 5)
   }
 
+  /** Work sessions from active store only (recent data, fast) */
   private getWorkSessions(): SessionRecord[] {
     const stats = dataManager.getStats()
     return stats.history.filter((s) => s.type === 'work' && s.completionType !== 'skipped')
   }
 
+  /** All sessions from active store only (recent data, fast) */
   private getAllSessions(): SessionRecord[] {
     return dataManager.getStats().history
+  }
+
+  /** Work sessions including archived (for long-range views like activity calendar) */
+  private getAllWorkSessionsFull(): SessionRecord[] {
+    return dataManager.getAllSessions().filter((s) => s.type === 'work' && s.completionType !== 'skipped')
   }
 
   private getSessionsForDate(date: string): SessionRecord[] {
@@ -102,14 +85,13 @@ class StatsService {
     const startDate = new Date(now)
     startDate.setMonth(startDate.getMonth() - months)
 
-    // Build a map of date -> session count
+    // Use full history (including archived) for long-range activity calendar
     const countMap = new Map<string, number>()
-    for (const session of this.getWorkSessions()) {
+    for (const session of this.getAllWorkSessionsFull()) {
       const date = session.startTime.split('T')[0]
       countMap.set(date, (countMap.get(date) || 0) + 1)
     }
 
-    // Generate all dates in range
     const current = new Date(startDate)
     while (current <= now) {
       const dateStr = this.formatDate(current)

@@ -1,7 +1,8 @@
 import { ipcMain, Notification } from 'electron'
-import { pomodoroService, type PomodoroSession } from './PomodoroService'
+import { pomodoroService } from './PomodoroService'
 import { configManager, dataManager, logger } from '../../core'
 import { popupWindow } from '../../core/PopupWindow'
+import type { PomodoroSession } from '@shared/types'
 
 export function registerPomodoroIPC(): void {
   ipcMain.handle('pomodoro:start', (_event, session?: PomodoroSession) => {

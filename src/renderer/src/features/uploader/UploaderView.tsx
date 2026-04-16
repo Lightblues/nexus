@@ -1,33 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Button } from '../../components'
 import DropZone from './DropZone'
 import ImagePreview from './ImagePreview'
 import UploadHistory from './UploadHistory'
-
-// Re-declare types locally to satisfy TypeScript (they're also defined globally in env.d.ts)
-interface UploaderConfigLocal {
-  enabled: boolean
-  github: { token: string; owner: string; repo: string; branch: string }
-  cdn: { baseUrl: string }
-  compress: { quality: number; defaultFormat: 'auto' | 'webp' | 'jpeg' | 'png' }
-  defaultPath: string
-  cacheThumbnails: boolean
-}
-
-interface UploadRecordLocal {
-  id: string
-  filename: string
-  originalName: string
-  timestamp: string
-  originalSize: number
-  compressedSize: number
-  width: number
-  height: number
-  format: 'png' | 'jpeg' | 'webp' | 'gif'
-  path: string
-  cdnUrl: string
-  sha: string
-}
+import type { UploaderConfig, UploadRecord } from '@shared/types'
 
 interface ImageState {
   buffer: number[]
@@ -46,18 +22,18 @@ interface UploaderViewProps {
 }
 
 export default function UploaderView({ onBack }: UploaderViewProps) {
-  const [config, setConfig] = useState<UploaderConfigLocal | null>(null)
+  const [config, setConfig] = useState<UploaderConfig | null>(null)
   const [image, setImage] = useState<ImageState | null>(null)
   const [path, setPath] = useState('')
   const [filename, setFilename] = useState('')
   const [recentPaths, setRecentPaths] = useState<string[]>([])
-  const [history, setHistory] = useState<UploadRecordLocal[]>([])
+  const [history, setHistory] = useState<UploadRecord[]>([])
   const [quality, setQuality] = useState(80)
   const [outputFormat, setOutputFormat] = useState<'auto' | 'webp' | 'jpeg' | 'png'>('auto')
   const [uploading, setUploading] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
-  const processImage = useCallback(async (buffer: number[], name: string, cfg: UploaderConfigLocal | null) => {
+  const processImage = useCallback(async (buffer: number[], name: string, cfg: UploaderConfig | null) => {
     const meta = await window.api.uploader.getImageMeta(buffer)
     const baseName = name.replace(/\.[^/.]+$/, '')
     const ext = meta.format === 'jpeg' ? 'jpg' : meta.format
@@ -132,12 +108,13 @@ export default function UploaderView({ onBack }: UploaderViewProps) {
   useEffect(() => {
     loadData()
     // Listen for images dropped on tray icon (for when view is already mounted)
-    window.api.uploader.onImageDropped((data) => {
+    const cleanupDropped = window.api.uploader.onImageDropped((data) => {
       // Process immediately if config is loaded
       if (config) {
         processImage(data.buffer, data.filename, config)
       }
     })
+    return () => cleanupDropped()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleUpload = async () => {

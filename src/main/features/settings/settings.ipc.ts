@@ -1,18 +1,9 @@
 import * as fs from 'fs'
 import * as yaml from 'js-yaml'
 import { ipcMain } from 'electron'
-import { pathManager, logger, type AppConfig } from '../../core'
+import { pathManager, logger } from '../../core'
 import { mainWindow } from '../../core/MainWindow'
-
-interface ValidationResult {
-  valid: boolean
-  error?: string
-}
-
-interface WriteResult {
-  success: boolean
-  error?: string
-}
+import type { ValidationResult, WriteResult } from '@shared/types'
 
 function validateConfig(content: string): ValidationResult {
   let parsed: unknown

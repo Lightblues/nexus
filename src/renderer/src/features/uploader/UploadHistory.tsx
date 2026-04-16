@@ -1,15 +1,8 @@
 import { useMemo, useEffect, useState } from 'react'
-
-interface UploadRecordLocal {
-  id: string
-  filename: string
-  path: string
-  cdnUrl: string
-  timestamp: string
-}
+import type { UploadRecord } from '@shared/types'
 
 interface UploadHistoryProps {
-  history: UploadRecordLocal[]
+  history: UploadRecord[]
   onCopy: (url: string) => void
   onDelete?: (id: string) => void
 }

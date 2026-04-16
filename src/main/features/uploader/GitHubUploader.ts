@@ -1,6 +1,6 @@
 import { Octokit } from '@octokit/rest'
 import { logger } from '../../core/Logger'
-import type { UploaderConfig, UploadResult } from './types'
+import type { UploaderConfig, UploadResult } from '@shared/types'
 
 export class GitHubUploader {
   private octokit: Octokit | null = null

@@ -1,6 +1,6 @@
 import sharp from 'sharp'
 import { logger } from '../../core/Logger'
-import type { CompressResult } from './types'
+import type { CompressResultMain } from './types'
 
 type OutputFormat = 'auto' | 'webp' | 'jpeg' | 'png'
 
@@ -8,7 +8,7 @@ export async function compressImage(
   buffer: Buffer,
   quality: number,
   outputFormat: OutputFormat = 'auto'
-): Promise<CompressResult & { outputFormat: string }> {
+): Promise<CompressResultMain & { outputFormat: string }> {
   const originalSize = buffer.length
   let image = sharp(buffer)
   const metadata = await image.metadata()

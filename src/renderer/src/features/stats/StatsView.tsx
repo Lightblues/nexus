@@ -5,44 +5,7 @@ import WeeklyChart from './WeeklyChart'
 import DailyTimeline from './DailyTimeline'
 import SessionList from './SessionList'
 import SessionEditModal from './SessionEditModal'
-
-interface DailyStats {
-  date: string
-  totalSessions: number
-  totalMinutes: number
-}
-
-interface WeeklyStats {
-  days: DailyStats[]
-  totalSessions: number
-  totalMinutes: number
-}
-
-interface ActivityData {
-  date: string
-  count: number
-  level: 0 | 1 | 2 | 3 | 4
-}
-
-interface TimelineSegment {
-  startTime: string
-  endTime: string
-  type: 'work' | 'shortBreak' | 'longBreak'
-  duration: number
-  project?: string
-}
-
-interface SessionRecord {
-  id: string
-  startTime: string
-  endTime: string
-  duration: number
-  type: 'work' | 'shortBreak' | 'longBreak'
-  completionType: 'normal' | 'early' | 'skipped'
-  project?: string
-  tags?: string[]
-  task?: string
-}
+import type { WeeklyStats, ActivityData, TimelineSegment, SessionRecord } from '@shared/types'
 
 export default function StatsView() {
   const [weeklyStats, setWeeklyStats] = useState<WeeklyStats | null>(null)

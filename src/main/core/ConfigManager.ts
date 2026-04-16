@@ -3,55 +3,9 @@ import * as yaml from 'js-yaml'
 import { EventEmitter } from 'events'
 import { pathManager } from './PathManager'
 import { logger } from './Logger'
+import type { AppConfig, PomodoroConfig, UIConfig, TrackerConfig, UploaderConfig } from '@shared/types'
 
-export interface PomodoroConfig {
-  workDuration: number
-  shortBreakDuration: number
-  longBreakDuration: number
-  sessionsBeforeLongBreak: number
-  projects: Array<{ name: string; color: string }>
-  tags: string[]
-  showPopoverOnComplete: boolean
-}
-
-export interface UIConfig {
-  windowWidth: number
-  windowHeight: number
-}
-
-export interface TrackerConfig {
-  enabled: boolean
-  pollInterval: number // seconds
-  idleThreshold: number // seconds
-  recordTitle: boolean
-  enrichApps: string[]
-}
-
-export interface UploaderConfig {
-  enabled: boolean
-  github: {
-    token: string
-    owner: string
-    repo: string
-    branch: string
-  }
-  cdn: {
-    baseUrl: string
-  }
-  compress: {
-    quality: number
-    defaultFormat: 'auto' | 'webp' | 'jpeg' | 'png'
-  }
-  defaultPath: string
-  cacheThumbnails: boolean
-}
-
-export interface AppConfig {
-  pomodoro: PomodoroConfig
-  ui: UIConfig
-  tracker: TrackerConfig
-  uploader: UploaderConfig
-}
+export type { AppConfig, PomodoroConfig, UIConfig, TrackerConfig, UploaderConfig }
 
 const DEFAULT_CONFIG: AppConfig = {
   pomodoro: {

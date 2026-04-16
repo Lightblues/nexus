@@ -1,27 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Button } from '../../components'
-
-interface PomodoroSession {
-  type: 'work' | 'shortBreak' | 'longBreak'
-  project?: string
-  tags?: string[]
-  task?: string
-}
-
-interface PomodoroStatus {
-  state: 'idle' | 'running' | 'paused' | 'finished'
-  sessionType: 'work' | 'shortBreak' | 'longBreak'
-  remainingSeconds: number
-  totalSeconds: number
-  completedSessions: number
-  currentSession?: PomodoroSession
-}
-
-interface NextActionOption {
-  action: 'startBreak' | 'startWork' | 'exit'
-  label: string
-  sessionType?: 'work' | 'shortBreak' | 'longBreak'
-}
+import type { PomodoroStatus, NextActionOption } from '@shared/types'
 
 interface PomodoroViewProps {
   onBack: () => void
@@ -75,15 +54,21 @@ export default function PomodoroView({ onBack }: PomodoroViewProps) {
     })
     loadTodayStats()
 
-    // Subscribe to updates
-    window.api.pomodoro.onTick((seconds) => {
+    // Subscribe to updates (store cleanup functions)
+    const cleanupTick = window.api.pomodoro.onTick((seconds) => {
       setStatus((prev) => ({ ...prev, remainingSeconds: seconds }))
     })
-    window.api.pomodoro.onStatus(setStatus)
-    window.api.pomodoro.onFinished(() => {
+    const cleanupStatus = window.api.pomodoro.onStatus(setStatus)
+    const cleanupFinished = window.api.pomodoro.onFinished(() => {
       window.api.pomodoro.getNextOptions().then(setNextOptions)
       loadTodayStats() // Refresh stats on session complete
     })
+
+    return () => {
+      cleanupTick()
+      cleanupStatus()
+      cleanupFinished()
+    }
   }, [])
 
   const formatTime = (seconds: number): string => {

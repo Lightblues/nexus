@@ -1,217 +1,28 @@
 import { contextBridge, ipcRenderer } from 'electron'
-
-export interface PomodoroSession {
-  type: 'work' | 'shortBreak' | 'longBreak'
-  project?: string
-  tags?: string[]
-  task?: string
-}
-
-export interface PomodoroStatus {
-  state: 'idle' | 'running' | 'paused' | 'finished'
-  sessionType: 'work' | 'shortBreak' | 'longBreak'
-  remainingSeconds: number
-  totalSeconds: number
-  completedSessions: number
-  currentSession?: PomodoroSession
-}
-
-export interface PomodoroStats {
-  totalSessions: number
-  history: unknown[]
-}
-
-export interface DailyStats {
-  date: string
-  totalSessions: number
-  totalMinutes: number
-  sessions: unknown[]
-}
-
-export interface WeeklyStats {
-  days: DailyStats[]
-  totalSessions: number
-  totalMinutes: number
-}
-
-export interface ActivityData {
-  date: string
-  count: number
-  level: 0 | 1 | 2 | 3 | 4
-}
-
-export interface TimelineSegment {
-  startTime: string
-  endTime: string
-  type: 'work' | 'shortBreak' | 'longBreak'
-  duration: number
-  project?: string
-}
-
-export interface SessionRecord {
-  id: string
-  startTime: string
-  endTime: string
-  duration: number
-  type: 'work' | 'shortBreak' | 'longBreak'
-  completionType: 'normal' | 'early' | 'skipped'
-  project?: string
-  tags?: string[]
-  task?: string
-}
-
-export interface SessionUpdate {
-  id: string
-  startTime?: string
-  endTime?: string
-  project?: string
-  tags?: string[]
-  task?: string
-}
-
-export interface NextActionOption {
-  action: 'startBreak' | 'startWork' | 'exit'
-  label: string
-  sessionType?: 'work' | 'shortBreak' | 'longBreak'
-}
-
-export interface LastSessionInfo {
-  project?: string
-  tags?: string[]
-}
-
-export interface TrackerConfig {
-  enabled: boolean
-  pollInterval: number
-  idleThreshold: number
-  recordTitle: boolean
-  enrichApps: string[]
-}
-
-export interface AppConfig {
-  pomodoro: {
-    workDuration: number
-    shortBreakDuration: number
-    longBreakDuration: number
-    sessionsBeforeLongBreak: number
-    projects: Array<{ name: string; color: string }>
-    tags: string[]
-  }
-  ui: {
-    windowWidth: number
-    windowHeight: number
-  }
-  tracker: TrackerConfig
-}
-
-export interface TrackerStatus {
-  enabled: boolean
-  running: boolean
-  permissionGranted: boolean
-}
-
-export interface ActivityContext {
-  project?: string // 项目名 (High level)
-  file?: string // 文件名/页面标题 (Granular level)
-  url?: string // 浏览器 URL
-  domain?: string // 提取的域名 (github.com)
-  rawTitle?: string // 原始标题作为兜底
-}
-
-export interface WindowActivityRecord {
-  startTime: string
-  endTime: string
-  duration: number
-  app: string
-  bundleId?: string
-  title?: string
-  context?: ActivityContext
-}
-
-export interface DailyTrackerData {
-  date: string
-  version: 1
-  records: WindowActivityRecord[]
-  meta: {
-    totalActiveTime: number
-    appSummary: Record<string, number>
-  }
-}
-
-export interface AppSummaryEntry {
-  app: string
-  duration: number
-  percentage: number
-}
-
-export interface ValidationResult {
-  valid: boolean
-  error?: string
-}
-
-export interface WriteResult {
-  success: boolean
-  error?: string
-}
-
-export interface UploaderConfig {
-  enabled: boolean
-  github: {
-    token: string
-    owner: string
-    repo: string
-    branch: string
-  }
-  cdn: {
-    baseUrl: string
-  }
-  compress: {
-    quality: number
-    defaultFormat: 'auto' | 'webp' | 'jpeg' | 'png'
-  }
-  defaultPath: string
-  cacheThumbnails: boolean
-}
-
-export interface ImageMeta {
-  buffer: number[]
-  format: 'png' | 'jpeg' | 'webp' | 'gif'
-  width: number
-  height: number
-  size: number
-}
-
-export interface CompressResult {
-  buffer: number[]
-  originalSize: number
-  compressedSize: number
-  width: number
-  height: number
-  outputFormat?: string
-}
-
-export interface UploadRecord {
-  id: string
-  filename: string
-  originalName: string
-  timestamp: string
-  originalSize: number
-  compressedSize: number
-  width: number
-  height: number
-  format: 'png' | 'jpeg' | 'webp' | 'gif'
-  path: string
-  cdnUrl: string
-  sha: string
-}
-
-export interface UploadResult {
-  success: boolean
-  cdnUrl?: string
-  sha?: string
-  error?: string
-  record?: UploadRecord
-}
+import type {
+  PomodoroSession,
+  PomodoroStatus,
+  PomodoroStats,
+  DailyStats,
+  WeeklyStats,
+  ActivityData,
+  TimelineSegment,
+  SessionRecord,
+  SessionUpdate,
+  NextActionOption,
+  LastSessionInfo,
+  AppConfig,
+  TrackerStatus,
+  DailyTrackerData,
+  AppSummaryEntry,
+  ValidationResult,
+  WriteResult,
+  UploaderConfig,
+  ImageMeta,
+  CompressResult,
+  UploadRecord,
+  UploadResult
+} from '@shared/types'
 
 const api = {
   pomodoro: {
@@ -237,14 +48,20 @@ const api = {
     addTag: (tag: string): Promise<string[]> => ipcRenderer.invoke('pomodoro:add-tag', tag),
     getLastSession: (): Promise<LastSessionInfo> =>
       ipcRenderer.invoke('pomodoro:get-last-session'),
-    onTick: (callback: (seconds: number) => void) => {
-      ipcRenderer.on('pomodoro:tick', (_event, seconds) => callback(seconds))
+    onTick: (callback: (seconds: number) => void): (() => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, seconds: number) => callback(seconds)
+      ipcRenderer.on('pomodoro:tick', handler)
+      return () => ipcRenderer.removeListener('pomodoro:tick', handler)
     },
-    onStatus: (callback: (status: PomodoroStatus) => void) => {
-      ipcRenderer.on('pomodoro:status', (_event, status) => callback(status))
+    onStatus: (callback: (status: PomodoroStatus) => void): (() => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, status: PomodoroStatus) => callback(status)
+      ipcRenderer.on('pomodoro:status', handler)
+      return () => ipcRenderer.removeListener('pomodoro:status', handler)
     },
-    onFinished: (callback: (sessionType: string) => void) => {
-      ipcRenderer.on('pomodoro:finished', (_event, sessionType) => callback(sessionType))
+    onFinished: (callback: (sessionType: string) => void): (() => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, sessionType: string) => callback(sessionType)
+      ipcRenderer.on('pomodoro:finished', handler)
+      return () => ipcRenderer.removeListener('pomodoro:finished', handler)
     }
   },
   config: {
@@ -298,16 +115,12 @@ const api = {
     getRecentPaths: (): Promise<string[]> => ipcRenderer.invoke('uploader:get-recent-paths'),
     copyUrl: (url: string): Promise<{ success: boolean }> => ipcRenderer.invoke('uploader:copy-url', url),
     getThumbnail: (id: string): Promise<number[] | null> => ipcRenderer.invoke('uploader:get-thumbnail', id),
-    onImageDropped: (callback: (data: { buffer: number[]; filename: string }) => void) => {
-      ipcRenderer.on('uploader:image-dropped', (_event, data) => callback(data))
+    onImageDropped: (callback: (data: { buffer: number[]; filename: string }) => void): (() => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: { buffer: number[]; filename: string }) => callback(data)
+      ipcRenderer.on('uploader:image-dropped', handler)
+      return () => ipcRenderer.removeListener('uploader:image-dropped', handler)
     }
   }
 }
 
 contextBridge.exposeInMainWorld('api', api)
-
-declare global {
-  interface Window {
-    api: typeof api
-  }
-}
