@@ -27,7 +27,6 @@ export default function PomodoroView({ onBack }: PomodoroViewProps) {
   const [newProject, setNewProject] = useState('')
   const [newTag, setNewTag] = useState('')
   const [showEditModal, setShowEditModal] = useState(false)
-  const [showIdleConfig, setShowIdleConfig] = useState(false)
   const [nextOptions, setNextOptions] = useState<NextActionOption[]>([])
   const [todayStats, setTodayStats] = useState<TodayStats>({ totalSessions: 0, totalMinutes: 0 })
 
@@ -38,10 +37,8 @@ export default function PomodoroView({ onBack }: PomodoroViewProps) {
   }
 
   useEffect(() => {
-    // Load initial status and data
     window.api.pomodoro.getStatus().then((s) => {
       setStatus(s)
-      // If already finished, load next options immediately
       if (s.state === 'finished') {
         window.api.pomodoro.getNextOptions().then(setNextOptions)
       }
@@ -55,14 +52,13 @@ export default function PomodoroView({ onBack }: PomodoroViewProps) {
     })
     loadTodayStats()
 
-    // Subscribe to updates (store cleanup functions)
     const cleanupTick = window.api.pomodoro.onTick((seconds) => {
       setStatus((prev) => ({ ...prev, remainingSeconds: seconds }))
     })
     const cleanupStatus = window.api.pomodoro.onStatus(setStatus)
     const cleanupFinished = window.api.pomodoro.onFinished(() => {
       window.api.pomodoro.getNextOptions().then(setNextOptions)
-      loadTodayStats() // Refresh stats on session complete
+      loadTodayStats()
     })
 
     return () => {
@@ -71,6 +67,16 @@ export default function PomodoroView({ onBack }: PomodoroViewProps) {
       cleanupFinished()
     }
   }, [])
+
+  // Esc to close edit modal
+  useEffect(() => {
+    if (!showEditModal) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowEditModal(false)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [showEditModal])
 
   const formatTime = (seconds: number): string => {
     const mins = Math.floor(seconds / 60)
@@ -131,11 +137,13 @@ export default function PomodoroView({ onBack }: PomodoroViewProps) {
   }
 
   const handleSaveEdit = async () => {
-    await window.api.pomodoro.updateSession({
-      project: selectedProject || undefined,
-      tags: selectedTags.length > 0 ? selectedTags : undefined,
-      task: taskDescription || undefined
-    })
+    if (status.state === 'running' || status.state === 'paused') {
+      await window.api.pomodoro.updateSession({
+        project: selectedProject || undefined,
+        tags: selectedTags.length > 0 ? selectedTags : undefined,
+        task: taskDescription || undefined
+      })
+    }
     setShowEditModal(false)
   }
 
@@ -167,9 +175,9 @@ export default function PomodoroView({ onBack }: PomodoroViewProps) {
     background: 'var(--bg-card)',
     color: 'var(--text-primary)',
     border: '1px solid var(--border)',
-    borderRadius: '6px',
-    padding: '6px 10px',
-    fontSize: '13px',
+    borderRadius: '4px',
+    padding: '4px 8px',
+    fontSize: '11px',
     width: '100%'
   }
 
@@ -179,14 +187,22 @@ export default function PomodoroView({ onBack }: PomodoroViewProps) {
   }
 
   const tagStyle = (selected: boolean) => ({
-    padding: '4px 8px',
+    padding: '2px 6px',
     borderRadius: '4px',
-    fontSize: '12px',
+    fontSize: '11px',
     cursor: 'pointer',
     background: selected ? 'var(--accent)' : 'var(--bg-card)',
     color: selected ? 'white' : 'var(--text-primary)',
     border: '1px solid var(--border)'
   })
+
+  // Summary text for project/tags display
+  const sessionSummary = (() => {
+    const parts: string[] = []
+    if (selectedProject) parts.push(selectedProject)
+    if (selectedTags.length > 0) parts.push(selectedTags.join(', '))
+    return parts.length > 0 ? parts.join(' · ') : 'No project'
+  })()
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -232,9 +248,8 @@ export default function PomodoroView({ onBack }: PomodoroViewProps) {
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        justifyContent: status.state === 'idle' ? 'flex-start' : 'center',
-        overflowY: 'auto',
-        paddingTop: status.state === 'idle' ? '8px' : '0'
+        justifyContent: 'center',
+        minHeight: 0
       }}>
         {/* Progress Ring */}
         <div style={{ position: 'relative', width: '140px', height: '140px', marginBottom: '12px', flexShrink: 0 }}>
@@ -269,70 +284,123 @@ export default function PomodoroView({ onBack }: PomodoroViewProps) {
           </div>
         </div>
 
-        {/* Current session info (running/paused) */}
-        {(status.state === 'running' || status.state === 'paused') && status.sessionType === 'work' && (
-          <div style={{ marginBottom: '12px', textAlign: 'center' }}>
-            <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-              {selectedProject || 'No project'}
-              {selectedTags.length > 0 && ` · ${selectedTags.join(', ')}`}
-            </div>
-            {taskDescription && (
-              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px', fontStyle: 'italic' }}>
-                {taskDescription}
-              </div>
-            )}
-            <Button variant="ghost" size="sm" onClick={() => setShowEditModal(true)}>
-              Edit
-            </Button>
-          </div>
-        )}
-
-        {/* Project/Tag Summary + Expand (idle state) */}
-        {status.state === 'idle' && !showIdleConfig && (
+        {/* Session info summary (clickable to edit) */}
+        {(status.state === 'idle' || ((status.state === 'running' || status.state === 'paused') && status.sessionType === 'work')) && (
           <div
-            onClick={() => setShowIdleConfig(true)}
+            onClick={() => setShowEditModal(true)}
             style={{
-              padding: '8px 12px',
+              padding: '6px 12px',
               background: 'var(--bg-card)',
-              borderRadius: '8px',
+              borderRadius: '6px',
               cursor: 'pointer',
               textAlign: 'center',
               marginBottom: '12px',
-              maxWidth: '280px',
+              maxWidth: '260px',
               width: '100%',
               flexShrink: 0
             }}
           >
-            <div style={{ fontSize: '13px', color: 'var(--text-primary)' }}>
-              {selectedProject || 'No project'}
-              {selectedTags.length > 0 && (
-                <span style={{ color: 'var(--text-secondary)' }}> · {selectedTags.join(', ')}</span>
-              )}
+            <div style={{ fontSize: '12px', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {sessionSummary}
             </div>
             {taskDescription && (
-              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px', fontStyle: 'italic' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px', fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {taskDescription}
               </div>
             )}
-            <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-              Tap to edit ▸
-            </div>
           </div>
         )}
+      </div>
 
-        {/* Project/Tag Editor (idle state, expanded) */}
-        {status.state === 'idle' && showIdleConfig && (
-          <div style={{ width: '100%', maxWidth: '280px', marginBottom: '12px', flexShrink: 1, minHeight: 0, overflowY: 'auto' }}>
+      {/* Controls */}
+      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center', flexShrink: 0, paddingBottom: '8px' }}>
+        {status.state === 'idle' && (
+          <Button onClick={handleStart}>Start Focus</Button>
+        )}
+
+        {status.state === 'running' && status.sessionType === 'work' && (
+          <>
+            <Button onClick={handlePause} variant="secondary">Pause</Button>
+            <Button onClick={handleFinishEarly} variant="primary">Finish Early</Button>
+            <Button onClick={handleExit} variant="ghost" size="sm">Exit</Button>
+          </>
+        )}
+
+        {status.state === 'running' && status.sessionType !== 'work' && (
+          <>
+            <Button onClick={handleSkipBreak}>Skip</Button>
+            <Button onClick={handleExit} variant="ghost" size="sm">Exit</Button>
+          </>
+        )}
+
+        {status.state === 'paused' && status.sessionType === 'work' && (
+          <>
+            <Button onClick={handleResume}>Resume</Button>
+            <Button onClick={handleFinishEarly} variant="primary">Finish Early</Button>
+            <Button onClick={handleExit} variant="ghost" size="sm">Exit</Button>
+          </>
+        )}
+
+        {status.state === 'paused' && status.sessionType !== 'work' && (
+          <>
+            <Button onClick={handleResume}>Resume</Button>
+            <Button onClick={handleSkipBreak} variant="secondary">Skip</Button>
+            <Button onClick={handleExit} variant="ghost" size="sm">Exit</Button>
+          </>
+        )}
+
+        {status.state === 'finished' && nextOptions.length > 0 && (
+          <>
+            {nextOptions.map((option) => (
+              <Button
+                key={option.action}
+                onClick={() => handleNextAction(option)}
+                variant={option.action === 'exit' ? 'ghost' : 'primary'}
+                size={option.action === 'exit' ? 'sm' : undefined}
+              >
+                {option.label}
+              </Button>
+            ))}
+          </>
+        )}
+      </div>
+
+      {/* Edit Modal (shared for idle + running/paused) */}
+      {showEditModal && (
+        <div
+          onClick={() => setShowEditModal(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 100
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: 'var(--bg-primary)',
+              borderRadius: '12px',
+              padding: '16px',
+              width: '280px',
+              maxHeight: '80vh',
+              overflowY: 'auto'
+            }}
+          >
+            <h3 style={{ margin: '0 0 12px', fontSize: '14px' }}>Edit Session</h3>
             {/* Project */}
-            <div style={{ marginBottom: '8px' }}>
-              <label style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'block', marginBottom: '2px' }}>
+            <div style={{ marginBottom: '10px' }}>
+              <label style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'block', marginBottom: '3px' }}>
                 Project
               </label>
               <div style={{ display: 'flex', gap: '4px' }}>
                 <select
                   value={selectedProject}
                   onChange={(e) => setSelectedProject(e.target.value)}
-                  style={{ ...selectStyle, flex: 1, padding: '5px 8px', fontSize: '12px' }}
+                  style={{ ...selectStyle, flex: 1 }}
                 >
                   <option value="">Select...</option>
                   {projects.map((p) => (
@@ -345,160 +413,16 @@ export default function PomodoroView({ onBack }: PomodoroViewProps) {
                   value={newProject}
                   onChange={(e) => setNewProject(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleAddProject()}
-                  style={{ ...inputStyle, width: '60px', padding: '5px 8px', fontSize: '12px' }}
+                  style={{ ...inputStyle, width: '60px' }}
                 />
               </div>
             </div>
             {/* Tags */}
-            <div style={{ marginBottom: '8px' }}>
-              <label style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'block', marginBottom: '2px' }}>
+            <div style={{ marginBottom: '10px' }}>
+              <label style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'block', marginBottom: '3px' }}>
                 Tags
               </label>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '4px' }}>
-                {tags.map((tag) => (
-                  <span
-                    key={tag}
-                    onClick={() => handleToggleTag(tag)}
-                    style={{ ...tagStyle(selectedTags.includes(tag)), padding: '2px 6px', fontSize: '11px' }}
-                  >
-                    {tag}
-                  </span>
-                ))}
-              </div>
-              <input
-                type="text"
-                placeholder="Add tag..."
-                value={newTag}
-                onChange={(e) => setNewTag(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleAddTag()}
-                style={{ ...inputStyle, padding: '5px 8px', fontSize: '12px' }}
-              />
-            </div>
-            {/* Task */}
-            <div style={{ marginBottom: '8px' }}>
-              <label style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'block', marginBottom: '2px' }}>
-                Task (optional)
-              </label>
-              <input
-                type="text"
-                placeholder="What are you working on?"
-                value={taskDescription}
-                onChange={(e) => setTaskDescription(e.target.value)}
-                style={{ ...inputStyle, padding: '5px 8px', fontSize: '12px' }}
-              />
-            </div>
-            <div style={{ textAlign: 'center' }}>
-              <Button variant="ghost" size="sm" onClick={() => setShowIdleConfig(false)}>
-                ▴ Collapse
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* Controls */}
-        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center', flexShrink: 0, paddingBottom: '8px' }}>
-          {status.state === 'idle' && (
-            <Button onClick={handleStart}>Start Focus</Button>
-          )}
-
-          {status.state === 'running' && status.sessionType === 'work' && (
-            <>
-              <Button onClick={handlePause} variant="secondary">Pause</Button>
-              <Button onClick={handleFinishEarly} variant="primary">Finish Early</Button>
-              <Button onClick={handleExit} variant="ghost" size="sm">Exit</Button>
-            </>
-          )}
-
-          {status.state === 'running' && status.sessionType !== 'work' && (
-            <>
-              <Button onClick={handleSkipBreak}>Skip</Button>
-              <Button onClick={handleExit} variant="ghost" size="sm">Exit</Button>
-            </>
-          )}
-
-          {status.state === 'paused' && status.sessionType === 'work' && (
-            <>
-              <Button onClick={handleResume}>Resume</Button>
-              <Button onClick={handleFinishEarly} variant="primary">Finish Early</Button>
-              <Button onClick={handleExit} variant="ghost" size="sm">Exit</Button>
-            </>
-          )}
-
-          {status.state === 'paused' && status.sessionType !== 'work' && (
-            <>
-              <Button onClick={handleResume}>Resume</Button>
-              <Button onClick={handleSkipBreak} variant="secondary">Skip</Button>
-              <Button onClick={handleExit} variant="ghost" size="sm">Exit</Button>
-            </>
-          )}
-
-          {status.state === 'finished' && nextOptions.length > 0 && (
-            <>
-              {nextOptions.map((option) => (
-                <Button
-                  key={option.action}
-                  onClick={() => handleNextAction(option)}
-                  variant={option.action === 'exit' ? 'ghost' : 'primary'}
-                  size={option.action === 'exit' ? 'sm' : undefined}
-                >
-                  {option.label}
-                </Button>
-              ))}
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Edit Modal */}
-      {showEditModal && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(0,0,0,0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 100
-        }}>
-          <div style={{
-            background: 'var(--bg-primary)',
-            borderRadius: '12px',
-            padding: '20px',
-            width: '280px',
-            maxHeight: '80vh',
-            overflowY: 'auto'
-          }}>
-            <h3 style={{ margin: '0 0 16px', fontSize: '16px' }}>Edit Session</h3>
-            <div style={{ marginBottom: '12px' }}>
-              <label style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
-                Project
-              </label>
-              <div style={{ display: 'flex', gap: '6px' }}>
-                <select
-                  value={selectedProject}
-                  onChange={(e) => setSelectedProject(e.target.value)}
-                  style={{ ...selectStyle, flex: 1 }}
-                >
-                  <option value="">Select project...</option>
-                  {projects.map((p) => (
-                    <option key={p} value={p}>{p}</option>
-                  ))}
-                </select>
-                <input
-                  type="text"
-                  placeholder="New"
-                  value={newProject}
-                  onChange={(e) => setNewProject(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleAddProject()}
-                  style={{ ...inputStyle, width: '70px' }}
-                />
-              </div>
-            </div>
-            <div style={{ marginBottom: '12px' }}>
-              <label style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
-                Tags
-              </label>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '6px', maxHeight: '120px', overflowY: 'auto' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '4px', maxHeight: '100px', overflowY: 'auto' }}>
                 {tags.map((tag) => (
                   <span
                     key={tag}
@@ -518,8 +442,9 @@ export default function PomodoroView({ onBack }: PomodoroViewProps) {
                 style={inputStyle}
               />
             </div>
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+            {/* Task */}
+            <div style={{ marginBottom: '12px' }}>
+              <label style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'block', marginBottom: '3px' }}>
                 Task
               </label>
               <input
@@ -531,8 +456,8 @@ export default function PomodoroView({ onBack }: PomodoroViewProps) {
               />
             </div>
             <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-              <Button variant="ghost" onClick={() => setShowEditModal(false)}>Cancel</Button>
-              <Button onClick={handleSaveEdit}>Save</Button>
+              <Button variant="ghost" size="sm" onClick={() => setShowEditModal(false)}>Cancel</Button>
+              <Button size="sm" onClick={handleSaveEdit}>Done</Button>
             </div>
           </div>
         </div>
