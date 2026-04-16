@@ -1,0 +1,7 @@
+name: nexus
+category: app
+origin: original
+scope: personal
+status: active
+stack: [typescript, electron, react]
+description: macOS menu bar toolkit — Pomodoro timer, image uploader, time tracker
