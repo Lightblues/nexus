@@ -322,7 +322,7 @@ export default function PomodoroView({ onBack }: PomodoroViewProps) {
 
         {/* Project/Tag Editor (idle state, expanded) */}
         {status.state === 'idle' && showIdleConfig && (
-          <div style={{ width: '100%', maxWidth: '280px', marginBottom: '12px', flexShrink: 0 }}>
+          <div style={{ width: '100%', maxWidth: '280px', marginBottom: '12px', flexShrink: 1, minHeight: 0, overflowY: 'auto' }}>
             {/* Project */}
             <div style={{ marginBottom: '8px' }}>
               <label style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'block', marginBottom: '2px' }}>
@@ -464,7 +464,9 @@ export default function PomodoroView({ onBack }: PomodoroViewProps) {
             background: 'var(--bg-primary)',
             borderRadius: '12px',
             padding: '20px',
-            width: '280px'
+            width: '280px',
+            maxHeight: '80vh',
+            overflowY: 'auto'
           }}>
             <h3 style={{ margin: '0 0 16px', fontSize: '16px' }}>Edit Session</h3>
             <div style={{ marginBottom: '12px' }}>
@@ -496,7 +498,7 @@ export default function PomodoroView({ onBack }: PomodoroViewProps) {
               <label style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
                 Tags
               </label>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '6px' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '6px', maxHeight: '120px', overflowY: 'auto' }}>
                 {tags.map((tag) => (
                   <span
                     key={tag}
