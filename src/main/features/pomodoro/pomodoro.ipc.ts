@@ -1,84 +1,85 @@
 import { ipcMain, Notification } from 'electron'
+import { IPC } from '@shared/ipc'
 import { pomodoroService } from './PomodoroService'
 import { configManager, dataManager, logger } from '../../core'
 import { popupWindow } from '../../core/PopupWindow'
 import type { PomodoroSession } from '@shared/types'
 
 export function registerPomodoroIPC(): void {
-  ipcMain.handle('pomodoro:start', (_event, session?: PomodoroSession) => {
+  ipcMain.handle(IPC.pomodoro.start, (_event, session?: PomodoroSession) => {
     pomodoroService.start(session)
     return pomodoroService.getStatus()
   })
 
-  ipcMain.handle('pomodoro:pause', () => {
+  ipcMain.handle(IPC.pomodoro.pause, () => {
     pomodoroService.pause()
     return pomodoroService.getStatus()
   })
 
-  ipcMain.handle('pomodoro:resume', () => {
+  ipcMain.handle(IPC.pomodoro.resume, () => {
     pomodoroService.resume()
     return pomodoroService.getStatus()
   })
 
-  ipcMain.handle('pomodoro:finish-early', () => {
+  ipcMain.handle(IPC.pomodoro.finishEarly, () => {
     pomodoroService.finishEarly()
     return pomodoroService.getStatus()
   })
 
-  ipcMain.handle('pomodoro:exit', () => {
+  ipcMain.handle(IPC.pomodoro.exit, () => {
     pomodoroService.exit()
     return pomodoroService.getStatus()
   })
 
-  ipcMain.handle('pomodoro:skip-break', () => {
+  ipcMain.handle(IPC.pomodoro.skipBreak, () => {
     pomodoroService.skipBreak()
     return pomodoroService.getStatus()
   })
 
-  ipcMain.handle('pomodoro:status', () => {
+  ipcMain.handle(IPC.pomodoro.status, () => {
     return pomodoroService.getStatus()
   })
 
-  ipcMain.handle('pomodoro:next-session-type', () => {
+  ipcMain.handle(IPC.pomodoro.nextSessionType, () => {
     return pomodoroService.getNextSessionType()
   })
 
-  ipcMain.handle('pomodoro:stats', () => {
+  ipcMain.handle(IPC.pomodoro.stats, () => {
     return dataManager.getStats()
   })
 
-  ipcMain.handle('pomodoro:next-options', () => {
+  ipcMain.handle(IPC.pomodoro.nextOptions, () => {
     return pomodoroService.getNextOptions()
   })
 
-  ipcMain.handle('pomodoro:update-session', (_event, updates: Partial<PomodoroSession>) => {
+  ipcMain.handle(IPC.pomodoro.updateSession, (_event, updates: Partial<PomodoroSession>) => {
     pomodoroService.updateCurrentSession(updates)
     return pomodoroService.getStatus()
   })
 
-  ipcMain.handle('pomodoro:get-projects', () => {
+  ipcMain.handle(IPC.pomodoro.getProjects, () => {
     return dataManager.getProjects()
   })
 
-  ipcMain.handle('pomodoro:add-project', (_event, project: string) => {
+  ipcMain.handle(IPC.pomodoro.addProject, (_event, project: string) => {
     dataManager.addProject(project)
     return dataManager.getProjects()
   })
 
-  ipcMain.handle('pomodoro:get-tags', () => {
+  ipcMain.handle(IPC.pomodoro.getTags, () => {
     return dataManager.getTags()
   })
 
-  ipcMain.handle('pomodoro:add-tag', (_event, tag: string) => {
+  ipcMain.handle(IPC.pomodoro.addTag, (_event, tag: string) => {
     dataManager.addTag(tag)
     return dataManager.getTags()
   })
 
-  ipcMain.handle('pomodoro:get-last-session', () => {
+  ipcMain.handle(IPC.pomodoro.getLastSession, () => {
     return dataManager.getLastSession()
   })
 
-  ipcMain.handle('config:get', () => {
+  ipcMain.handle(IPC.config.get, () => {
     return configManager.get()
   })
 
@@ -86,21 +87,21 @@ export function registerPomodoroIPC(): void {
   pomodoroService.on('tick', (remainingSeconds: number) => {
     const win = popupWindow.getWindow()
     if (win) {
-      win.webContents.send('pomodoro:tick', remainingSeconds)
+      win.webContents.send(IPC.pomodoro.tick, remainingSeconds)
     }
   })
 
   pomodoroService.on('status', (status) => {
     const win = popupWindow.getWindow()
     if (win) {
-      win.webContents.send('pomodoro:status', status)
+      win.webContents.send(IPC.pomodoro.status, status)
     }
   })
 
   pomodoroService.on('finished', (sessionType) => {
     const win = popupWindow.getWindow()
     if (win) {
-      win.webContents.send('pomodoro:finished', sessionType)
+      win.webContents.send(IPC.pomodoro.finished, sessionType)
     }
     // System notification
     const options = pomodoroService.getNextOptions()

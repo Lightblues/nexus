@@ -3,6 +3,7 @@ import Dashboard from './features/dashboard/Dashboard'
 import PomodoroView from './features/pomodoro/PomodoroView'
 import { UploaderView } from './features/uploader'
 import { MainWindowLayout } from './features/main'
+import { ErrorBoundary } from './components'
 
 type View = 'dashboard' | 'pomodoro' | 'uploader' | 'main'
 
@@ -35,7 +36,9 @@ export default function App() {
   if (view === 'main') {
     return (
       <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-        <MainWindowLayout />
+        <ErrorBoundary fallbackLabel="Main Window">
+          <MainWindowLayout />
+        </ErrorBoundary>
       </div>
     )
   }
@@ -49,8 +52,16 @@ export default function App() {
           onSelectUploader={() => setView('uploader')}
         />
       )}
-      {view === 'pomodoro' && <PomodoroView onBack={() => setView('dashboard')} />}
-      {view === 'uploader' && <UploaderView onBack={() => setView('dashboard')} />}
+      {view === 'pomodoro' && (
+        <ErrorBoundary fallbackLabel="Pomodoro">
+          <PomodoroView onBack={() => setView('dashboard')} />
+        </ErrorBoundary>
+      )}
+      {view === 'uploader' && (
+        <ErrorBoundary fallbackLabel="Uploader">
+          <UploaderView onBack={() => setView('dashboard')} />
+        </ErrorBoundary>
+      )}
     </div>
   )
 }

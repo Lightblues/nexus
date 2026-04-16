@@ -27,6 +27,7 @@ export default function PomodoroView({ onBack }: PomodoroViewProps) {
   const [newProject, setNewProject] = useState('')
   const [newTag, setNewTag] = useState('')
   const [showEditModal, setShowEditModal] = useState(false)
+  const [showIdleConfig, setShowIdleConfig] = useState(false)
   const [nextOptions, setNextOptions] = useState<NextActionOption[]>([])
   const [todayStats, setTodayStats] = useState<TodayStats>({ totalSessions: 0, totalMinutes: 0 })
 
@@ -286,8 +287,41 @@ export default function PomodoroView({ onBack }: PomodoroViewProps) {
           </div>
         )}
 
-        {/* Project/Tag Selector (idle state) */}
-        {status.state === 'idle' && (
+        {/* Project/Tag Summary + Expand (idle state) */}
+        {status.state === 'idle' && !showIdleConfig && (
+          <div
+            onClick={() => setShowIdleConfig(true)}
+            style={{
+              padding: '8px 12px',
+              background: 'var(--bg-card)',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              textAlign: 'center',
+              marginBottom: '12px',
+              maxWidth: '280px',
+              width: '100%',
+              flexShrink: 0
+            }}
+          >
+            <div style={{ fontSize: '13px', color: 'var(--text-primary)' }}>
+              {selectedProject || 'No project'}
+              {selectedTags.length > 0 && (
+                <span style={{ color: 'var(--text-secondary)' }}> · {selectedTags.join(', ')}</span>
+              )}
+            </div>
+            {taskDescription && (
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px', fontStyle: 'italic' }}>
+                {taskDescription}
+              </div>
+            )}
+            <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+              Tap to edit ▸
+            </div>
+          </div>
+        )}
+
+        {/* Project/Tag Editor (idle state, expanded) */}
+        {status.state === 'idle' && showIdleConfig && (
           <div style={{ width: '100%', maxWidth: '280px', marginBottom: '12px', flexShrink: 0 }}>
             {/* Project */}
             <div style={{ marginBottom: '8px' }}>
@@ -341,7 +375,7 @@ export default function PomodoroView({ onBack }: PomodoroViewProps) {
               />
             </div>
             {/* Task */}
-            <div>
+            <div style={{ marginBottom: '8px' }}>
               <label style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'block', marginBottom: '2px' }}>
                 Task (optional)
               </label>
@@ -352,6 +386,11 @@ export default function PomodoroView({ onBack }: PomodoroViewProps) {
                 onChange={(e) => setTaskDescription(e.target.value)}
                 style={{ ...inputStyle, padding: '5px 8px', fontSize: '12px' }}
               />
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <Button variant="ghost" size="sm" onClick={() => setShowIdleConfig(false)}>
+                ▴ Collapse
+              </Button>
             </div>
           </div>
         )}

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import StatsView from '../stats/StatsView'
 import { SettingsView } from '../settings'
 import { TrackerView } from '../tracker'
+import { ErrorBoundary } from '../../components'
 
 type Tab = 'stats' | 'tracker' | 'settings'
 
@@ -110,9 +111,21 @@ export default function MainWindowLayout() {
 
       {/* Content */}
       <div style={{ flex: 1, overflow: 'hidden' }}>
-        {activeTab === 'stats' && <StatsView />}
-        {activeTab === 'tracker' && <TrackerView />}
-        {activeTab === 'settings' && <SettingsView />}
+        {activeTab === 'stats' && (
+          <ErrorBoundary fallbackLabel="Statistics">
+            <StatsView />
+          </ErrorBoundary>
+        )}
+        {activeTab === 'tracker' && (
+          <ErrorBoundary fallbackLabel="Time Tracker">
+            <TrackerView />
+          </ErrorBoundary>
+        )}
+        {activeTab === 'settings' && (
+          <ErrorBoundary fallbackLabel="Settings">
+            <SettingsView />
+          </ErrorBoundary>
+        )}
       </div>
     </div>
   )

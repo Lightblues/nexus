@@ -1,34 +1,35 @@
 import { ipcMain } from 'electron'
+import { IPC } from '@shared/ipc'
 import { statsService } from './StatsService'
 import { mainWindow } from '../../core'
 import { logger } from '../../core'
 
 export function registerStatsIPC(): void {
-  ipcMain.handle('stats:get-today', () => {
+  ipcMain.handle(IPC.stats.getToday, () => {
     return statsService.getTodayStats()
   })
 
-  ipcMain.handle('stats:get-weekly', () => {
+  ipcMain.handle(IPC.stats.getWeekly, () => {
     return statsService.getWeeklyStats()
   })
 
-  ipcMain.handle('stats:get-activity', (_event, months?: number) => {
+  ipcMain.handle(IPC.stats.getActivity, (_event, months?: number) => {
     return statsService.getActivityData(months)
   })
 
-  ipcMain.handle('stats:get-timeline', (_event, date?: string) => {
+  ipcMain.handle(IPC.stats.getTimeline, (_event, date?: string) => {
     return statsService.getTimelineData(date)
   })
 
-  ipcMain.handle('window:open-stats', () => {
+  ipcMain.handle(IPC.window.openStats, () => {
     mainWindow.show()
   })
 
-  ipcMain.handle('stats:get-sessions', (_event, date?: string) => {
+  ipcMain.handle(IPC.stats.getSessions, (_event, date?: string) => {
     return statsService.getSessionsForDateFull(date)
   })
 
-  ipcMain.handle('stats:update-session', (_event, id: string, updates: Record<string, unknown>) => {
+  ipcMain.handle(IPC.stats.updateSession, (_event, id: string, updates: Record<string, unknown>) => {
     return statsService.updateSession(id, updates)
   })
 
