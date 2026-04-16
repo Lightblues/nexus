@@ -1,43 +1,14 @@
+import * as fs from 'fs'
+import * as path from 'path'
 import Store from 'electron-store'
 import { pathManager } from './PathManager'
 import { logger } from './Logger'
+import type { SessionRecord, PomodoroStats, LastSessionInfo, PomodoroMetadata, AppData } from '@shared/types'
 
-export interface SessionRecord {
-  id: string
-  startTime: string
-  endTime: string
-  duration: number // actual minutes
-  type: 'work' | 'shortBreak' | 'longBreak'
-  completionType: 'normal' | 'early' | 'skipped'
-  project?: string
-  tags?: string[]
-  task?: string
-}
+export type { SessionRecord, PomodoroStats, LastSessionInfo, PomodoroMetadata, AppData }
 
-export interface PomodoroStats {
-  totalSessions: number
-  history: SessionRecord[]
-}
-
-export interface LastSessionInfo {
-  project?: string
-  tags?: string[]
-}
-
-export interface PomodoroMetadata {
-  projects: string[]
-  tags: string[]
-  lastSession: LastSessionInfo
-}
-
-export interface AppData {
-  stats: {
-    pomodoro: PomodoroStats
-  }
-  metadata: {
-    pomodoro: PomodoroMetadata
-  }
-}
+/** Days to keep in active store before archiving */
+const ARCHIVE_THRESHOLD_DAYS = 90
 
 const DEFAULT_DATA: AppData = {
   stats: {
@@ -65,6 +36,7 @@ class DataManager {
       defaults: DEFAULT_DATA
     })
     logger.info('DataManager initialized', { path: pathManager.dataPath })
+    this.archiveOldSessions()
   }
 
   get<K extends keyof AppData>(key: K): AppData[K] {
@@ -93,11 +65,9 @@ class DataManager {
 
   private updateMetadataFromSession(session: SessionRecord): void {
     const metadata = this.get('metadata')
-    // Add project if new
     if (session.project && !metadata.pomodoro.projects.includes(session.project)) {
       metadata.pomodoro.projects.push(session.project)
     }
-    // Add tags if new
     if (session.tags) {
       for (const tag of session.tags) {
         if (!metadata.pomodoro.tags.includes(tag)) {
@@ -105,7 +75,6 @@ class DataManager {
         }
       }
     }
-    // Update lastSession
     metadata.pomodoro.lastSession = {
       project: session.project,
       tags: session.tags
@@ -115,6 +84,13 @@ class DataManager {
 
   getStats(): PomodoroStats {
     return this.get('stats').pomodoro
+  }
+
+  /** Get all sessions including archived ones (for stats views that need full history) */
+  getAllSessions(): SessionRecord[] {
+    const active = this.get('stats').pomodoro.history
+    const archived = this.loadAllArchived()
+    return [...archived, ...active]
   }
 
   getProjects(): string[] {
@@ -151,14 +127,12 @@ class DataManager {
     if (index === -1) return null
 
     const session = stats.pomodoro.history[index]
-    // Apply updates
     if (updates.startTime !== undefined) session.startTime = updates.startTime
     if (updates.endTime !== undefined) session.endTime = updates.endTime
     if (updates.project !== undefined) session.project = updates.project
     if (updates.tags !== undefined) session.tags = updates.tags
     if (updates.task !== undefined) session.task = updates.task
 
-    // Recalculate duration if times changed
     if (updates.startTime !== undefined || updates.endTime !== undefined) {
       const start = new Date(session.startTime).getTime()
       const end = new Date(session.endTime).getTime()
@@ -168,13 +142,102 @@ class DataManager {
     stats.pomodoro.history[index] = session
     this.set('stats', stats)
 
-    // Update metadata if new project/tags
     if (updates.project || updates.tags) {
       this.updateMetadataFromSession(session)
     }
 
     logger.info('Session updated', { id: session.id })
     return session
+  }
+
+  // --- Archiving ---
+
+  /** Move sessions older than ARCHIVE_THRESHOLD_DAYS to yearly archive files */
+  private archiveOldSessions(): void {
+    const stats = this.get('stats')
+    const history = stats.pomodoro.history
+    if (history.length === 0) return
+
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - ARCHIVE_THRESHOLD_DAYS)
+    const cutoffStr = cutoff.toISOString()
+
+    const toArchive = history.filter((s) => s.startTime < cutoffStr)
+    if (toArchive.length === 0) return
+
+    // Group by year
+    const byYear = new Map<string, SessionRecord[]>()
+    for (const session of toArchive) {
+      const year = session.startTime.substring(0, 4) // "2025"
+      const existing = byYear.get(year) || []
+      existing.push(session)
+      byYear.set(year, existing)
+    }
+
+    // Write to archive files (merge with existing)
+    for (const [year, sessions] of byYear) {
+      this.appendToArchive(year, sessions)
+    }
+
+    // Remove archived from active store
+    const remaining = history.filter((s) => s.startTime >= cutoffStr)
+    stats.pomodoro.history = remaining
+    this.set('stats', stats)
+
+    logger.info(`Archived ${toArchive.length} sessions, ${remaining.length} remaining in active store`)
+  }
+
+  private getArchivePath(year: string): string {
+    return path.join(pathManager.archiveDir, `pomodoro-${year}.json`)
+  }
+
+  private appendToArchive(year: string, sessions: SessionRecord[]): void {
+    const archivePath = this.getArchivePath(year)
+    let existing: SessionRecord[] = []
+
+    try {
+      if (fs.existsSync(archivePath)) {
+        const content = fs.readFileSync(archivePath, 'utf-8')
+        existing = JSON.parse(content)
+      }
+    } catch (err) {
+      logger.error(`Failed to read archive ${year}`, err)
+    }
+
+    // Deduplicate by id
+    const existingIds = new Set(existing.map((s) => s.id))
+    const newSessions = sessions.filter((s) => !existingIds.has(s.id))
+    const merged = [...existing, ...newSessions].sort(
+      (a, b) => a.startTime.localeCompare(b.startTime)
+    )
+
+    try {
+      fs.writeFileSync(archivePath, JSON.stringify(merged, null, 2))
+      logger.info(`Archive ${year}: ${newSessions.length} new, ${merged.length} total`)
+    } catch (err) {
+      logger.error(`Failed to write archive ${year}`, err)
+    }
+  }
+
+  private loadAllArchived(): SessionRecord[] {
+    const archiveDir = pathManager.archiveDir
+    try {
+      if (!fs.existsSync(archiveDir)) return []
+      const files = fs.readdirSync(archiveDir).filter((f) => f.startsWith('pomodoro-') && f.endsWith('.json'))
+      const all: SessionRecord[] = []
+      for (const file of files) {
+        try {
+          const content = fs.readFileSync(path.join(archiveDir, file), 'utf-8')
+          const sessions: SessionRecord[] = JSON.parse(content)
+          all.push(...sessions)
+        } catch (err) {
+          logger.error(`Failed to read archive file ${file}`, err)
+        }
+      }
+      return all.sort((a, b) => a.startTime.localeCompare(b.startTime))
+    } catch {
+      return []
+    }
   }
 }
 

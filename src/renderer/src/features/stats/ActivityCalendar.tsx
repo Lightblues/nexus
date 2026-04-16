@@ -1,10 +1,5 @@
 import { ActivityCalendar as ActivityCalendarLib, ThemeInput } from 'react-activity-calendar'
-
-interface ActivityData {
-  date: string
-  count: number
-  level: 0 | 1 | 2 | 3 | 4
-}
+import type { ActivityData } from '@shared/types'
 
 interface ActivityCalendarProps {
   data: ActivityData[]

@@ -1,11 +1,6 @@
 import { useState } from 'react'
 import { getAppColor, formatDuration } from './appColors'
-
-interface ActivityContext {
-  project?: string
-  file?: string
-  domain?: string
-}
+import type { ActivityContext } from '@shared/types'
 
 interface TrackerTimelineSegment {
   startTime: string

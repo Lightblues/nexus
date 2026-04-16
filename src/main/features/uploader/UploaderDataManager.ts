@@ -3,7 +3,7 @@ import * as path from 'path'
 import { pathManager } from '../../core/PathManager'
 import { logger } from '../../core/Logger'
 import { generateThumbnail } from './ImageCompressor'
-import type { UploaderData, UploadRecord } from './types'
+import type { UploaderData, UploadRecord } from '@shared/types'
 
 const DEFAULT_DATA: UploaderData = {
   version: 1,

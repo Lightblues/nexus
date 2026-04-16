@@ -6,7 +6,7 @@ macOS menu bar toolkit — Pomodoro timer, image uploader, time tracker.
 - **Dev**: `pnpm dev`
 - **Build**: `pnpm build:mac` → `.dmg` installer
 - **Data**: `~/.ea/nexus/`
-- **Spec**: `.ea/spec/spec.md`
+- **Spec**: `.ea/spec/` (spec.md → architecture, pomodoro, tracker, uploader, decisions, changelog)
 
 ## Coding Style
 - Compact and type-hinted

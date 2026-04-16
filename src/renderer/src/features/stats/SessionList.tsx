@@ -1,14 +1,4 @@
-interface SessionRecord {
-  id: string
-  startTime: string
-  endTime: string
-  duration: number
-  type: 'work' | 'shortBreak' | 'longBreak'
-  completionType: 'normal' | 'early' | 'skipped'
-  project?: string
-  tags?: string[]
-  task?: string
-}
+import type { SessionRecord } from '@shared/types'
 
 interface SessionListProps {
   sessions: SessionRecord[]

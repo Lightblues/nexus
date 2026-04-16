@@ -3,11 +3,11 @@ import Dashboard from './features/dashboard/Dashboard'
 import PomodoroView from './features/pomodoro/PomodoroView'
 import { UploaderView } from './features/uploader'
 import { MainWindowLayout } from './features/main'
+import { ErrorBoundary } from './components'
 
 type View = 'dashboard' | 'pomodoro' | 'uploader' | 'main'
 
 function getInitialView(): View {
-  // Check URL hash for MainWindow routes
   const hash = window.location.hash
   // Main window routes: stats, settings, tracker
   if (
@@ -15,11 +15,6 @@ function getInitialView(): View {
     hash.startsWith('#/settings') ||
     hash.startsWith('#/tracker')
   ) {
-    return 'main'
-  }
-  // Check window size to detect MainWindow (larger than popup)
-  // Popup is typically ~340x480, MainWindow is ~900x600
-  if (window.innerWidth > 500) {
     return 'main'
   }
   return 'dashboard'
@@ -30,18 +25,20 @@ export default function App() {
 
   // Auto-switch to uploader view when image is dropped on tray
   useEffect(() => {
-    if (getInitialView() !== 'main') {
-      window.api.uploader.onImageDropped(() => {
-        setView('uploader')
-      })
-    }
+    if (getInitialView() === 'main') return
+    const cleanup = window.api.uploader.onImageDropped(() => {
+      setView('uploader')
+    })
+    return cleanup
   }, [])
 
   // MainWindow with sidebar navigation (stats/settings)
   if (view === 'main') {
     return (
       <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-        <MainWindowLayout />
+        <ErrorBoundary fallbackLabel="Main Window">
+          <MainWindowLayout />
+        </ErrorBoundary>
       </div>
     )
   }
@@ -55,8 +52,16 @@ export default function App() {
           onSelectUploader={() => setView('uploader')}
         />
       )}
-      {view === 'pomodoro' && <PomodoroView onBack={() => setView('dashboard')} />}
-      {view === 'uploader' && <UploaderView onBack={() => setView('dashboard')} />}
+      {view === 'pomodoro' && (
+        <ErrorBoundary fallbackLabel="Pomodoro">
+          <PomodoroView onBack={() => setView('dashboard')} />
+        </ErrorBoundary>
+      )}
+      {view === 'uploader' && (
+        <ErrorBoundary fallbackLabel="Uploader">
+          <UploaderView onBack={() => setView('dashboard')} />
+        </ErrorBoundary>
+      )}
     </div>
   )
 }

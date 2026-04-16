@@ -5,7 +5,8 @@ import { logger } from '../../core/Logger'
 import { compressImage, getImageMeta } from './ImageCompressor'
 import { githubUploader } from './GitHubUploader'
 import { uploaderDataManager } from './UploaderDataManager'
-import type { UploaderConfig, UploadRecord, ImageMeta, CompressResult, UploadResult } from './types'
+import type { UploaderConfig, UploadRecord, UploadResult } from '@shared/types'
+import type { ImageMetaMain, CompressResultMain } from './types'
 
 class UploaderService {
   private config: UploaderConfig | null = null
@@ -31,7 +32,7 @@ class UploaderService {
     return this.config
   }
 
-  async getClipboardImage(): Promise<ImageMeta | null> {
+  async getClipboardImage(): Promise<ImageMetaMain | null> {
     try {
       const image = clipboard.readImage()
       if (image.isEmpty()) {
@@ -56,7 +57,7 @@ class UploaderService {
     buffer: Buffer,
     quality: number,
     format: 'auto' | 'webp' | 'jpeg' | 'png' = 'auto'
-  ): Promise<CompressResult & { outputFormat: string }> {
+  ): Promise<CompressResultMain & { outputFormat: string }> {
     return compressImage(buffer, quality, format)
   }
 

@@ -1,18 +1,10 @@
 import * as fs from 'fs'
 import * as yaml from 'js-yaml'
 import { ipcMain } from 'electron'
-import { pathManager, logger, type AppConfig } from '../../core'
+import { IPC } from '@shared/ipc'
+import { pathManager, logger } from '../../core'
 import { mainWindow } from '../../core/MainWindow'
-
-interface ValidationResult {
-  valid: boolean
-  error?: string
-}
-
-interface WriteResult {
-  success: boolean
-  error?: string
-}
+import type { ValidationResult, WriteResult } from '@shared/types'
 
 function validateConfig(content: string): ValidationResult {
   let parsed: unknown
@@ -25,7 +17,6 @@ function validateConfig(content: string): ValidationResult {
     return { valid: false, error: 'Config must be a YAML object' }
   }
   const config = parsed as Record<string, unknown>
-  // Validate pomodoro section
   if (!config.pomodoro || typeof config.pomodoro !== 'object') {
     return { valid: false, error: 'Missing required section: pomodoro' }
   }
@@ -42,7 +33,6 @@ function validateConfig(content: string): ValidationResult {
   if (pomodoro.tags !== undefined && !Array.isArray(pomodoro.tags)) {
     return { valid: false, error: 'pomodoro.tags must be an array' }
   }
-  // Validate ui section (optional but must be valid if present)
   if (config.ui !== undefined) {
     if (typeof config.ui !== 'object') {
       return { valid: false, error: 'ui must be an object' }
@@ -59,7 +49,7 @@ function validateConfig(content: string): ValidationResult {
 }
 
 export function registerSettingsIPC(): void {
-  ipcMain.handle('config:read-raw', () => {
+  ipcMain.handle(IPC.config.readRaw, () => {
     const configPath = pathManager.configPath
     try {
       if (!fs.existsSync(configPath)) {
@@ -72,11 +62,11 @@ export function registerSettingsIPC(): void {
     }
   })
 
-  ipcMain.handle('config:validate', (_event, content: string): ValidationResult => {
+  ipcMain.handle(IPC.config.validate, (_event, content: string): ValidationResult => {
     return validateConfig(content)
   })
 
-  ipcMain.handle('config:write-raw', (_event, content: string): WriteResult => {
+  ipcMain.handle(IPC.config.writeRaw, (_event, content: string): WriteResult => {
     const validation = validateConfig(content)
     if (!validation.valid) {
       return { success: false, error: validation.error }
@@ -92,7 +82,7 @@ export function registerSettingsIPC(): void {
     }
   })
 
-  ipcMain.handle('window:open-settings', () => {
+  ipcMain.handle(IPC.window.openSettings, () => {
     mainWindow.showWithRoute('/settings')
   })
 

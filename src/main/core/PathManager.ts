@@ -26,9 +26,14 @@ class PathManager {
     return path.join(this._eaDir, 'logs')
   }
 
+  get archiveDir(): string {
+    return path.join(this._eaDir, 'archive')
+  }
+
   ensureDirectories(): void {
     fs.mkdirSync(this._eaDir, { recursive: true })
     fs.mkdirSync(this.logsDir, { recursive: true })
+    fs.mkdirSync(this.archiveDir, { recursive: true })
   }
 
   getResourcePath(filename: string): string {
