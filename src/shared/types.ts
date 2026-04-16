@@ -106,6 +106,9 @@ export interface PomodoroConfig {
   projects: Array<{ name: string; color: string }>
   tags: string[]
   showPopoverOnComplete: boolean
+  autoStartBreak: boolean
+  autoStartBreakDelay: number // seconds before auto-starting break
+  confettiOnComplete: boolean
 }
 
 export interface UIConfig {

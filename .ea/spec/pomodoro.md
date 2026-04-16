@@ -9,8 +9,8 @@
 
 ## State Machine
 ```
-Idle → Running → Paused → Finished
-                    ↘ Finished (early)
+Idle → Running → Paused → Finished → (auto) Running (break)
+                    ↘ Finished (early) ↗
 ```
 
 Actions per state:
@@ -18,6 +18,7 @@ Actions per state:
 - **Running (break)**: Skip, Exit
 - **Paused**: Resume, Finish Early, Exit
 - **Finished**: Start next (break/work), Exit
+- **Finished (work, auto)**: After `autoStartBreakDelay` seconds, auto-starts break (cancelable by Exit or manual action)
 
 ## Session Metadata
 - `project`: High-level grouping (orthogonal to tags, like Linear.app)
@@ -67,6 +68,9 @@ pomodoro:
   projects: [{ name: 'default', color: '#3B82F6' }]
   tags: ['work', 'study', 'personal']
   showPopoverOnComplete: true
+  autoStartBreak: true         # auto-start break after focus ends
+  autoStartBreakDelay: 3       # seconds before break auto-starts
+  confettiOnComplete: true     # trigger Raycast confetti on focus completion
 ```
 
 ## Data Storage

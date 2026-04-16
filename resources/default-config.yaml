@@ -15,6 +15,9 @@ pomodoro:
     - personal
   
   showPopoverOnComplete: false
+  autoStartBreak: true         # auto-start break after focus ends
+  autoStartBreakDelay: 3       # seconds before break auto-starts
+  confettiOnComplete: true     # trigger Raycast confetti on focus completion
 
 ui:
   windowWidth: 320

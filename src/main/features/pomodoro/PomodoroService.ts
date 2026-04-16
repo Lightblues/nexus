@@ -18,9 +18,11 @@ class PomodoroService extends EventEmitter {
   private currentSession: PomodoroSession | null = null
   private lastResetDate: string = ''
   private initialized = false
+  private autoStartTimer: NodeJS.Timeout | null = null
 
   start(session?: PomodoroSession): void {
     if (this.state === 'running') return
+    this.cancelAutoStart()
 
     this.checkAndResetDaily()
 
@@ -84,6 +86,7 @@ class PomodoroService extends EventEmitter {
   exit(): void {
     if (this.state === 'idle') return
     this.stopTimer()
+    this.cancelAutoStart()
     this.state = 'idle'
     this.remainingSeconds = 0
     this.currentSession = null
@@ -141,6 +144,13 @@ class PomodoroService extends EventEmitter {
     }
   }
 
+  private cancelAutoStart(): void {
+    if (this.autoStartTimer) {
+      clearTimeout(this.autoStartTimer)
+      this.autoStartTimer = null
+    }
+  }
+
   private onTimerComplete(): void {
     this.stopTimer()
     this.recordSession('normal')
@@ -154,6 +164,27 @@ class PomodoroService extends EventEmitter {
     this.emitStatus()
     this.emit('finished', this.sessionType)
     logger.info('Pomodoro finished', { type: this.sessionType })
+
+    // Auto-start break after work session
+    if (this.sessionType === 'work') {
+      const config = configManager.get().pomodoro
+      if (config.autoStartBreak) {
+        const nextType = this.getNextSessionType()
+        const session = this.currentSession
+        this.autoStartTimer = setTimeout(() => {
+          this.autoStartTimer = null
+          // Only auto-start if still in finished state (user hasn't acted)
+          if (this.state === 'finished') {
+            this.start({
+              type: nextType,
+              project: session?.project,
+              tags: session?.tags,
+              task: session?.task
+            })
+          }
+        }, config.autoStartBreakDelay * 1000)
+      }
+    }
   }
 
   private recordSession(completionType: 'normal' | 'early' | 'skipped'): void {
