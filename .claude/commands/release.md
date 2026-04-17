@@ -11,6 +11,6 @@ Instructions:
 4. Update the `version` field in `package.json` to the new version.
 5. Run `pnpm install --lockfile-only` to sync `pnpm-lock.yaml`.
 6. Create a git commit with message: `release: nexus v{version}`
-7. Create a git tag `nexus-v{version}`.
+7. Create an annotated git tag: `git tag -a nexus-v{version} -m "nexus v{version}"`.
 8. Push the commit and tag to origin: `git push origin main --follow-tags`
 9. Report the tag name and the CI workflow URL (use `gh run list -w build.yml -L 1` to find it).
