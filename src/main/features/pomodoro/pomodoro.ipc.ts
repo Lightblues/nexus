@@ -1,4 +1,5 @@
-import { ipcMain, Notification, shell } from 'electron'
+import { ipcMain, Notification } from 'electron'
+import { execFile } from 'child_process'
 import { IPC } from '@shared/ipc'
 import { pomodoroService } from './PomodoroService'
 import { configManager, dataManager, logger } from '../../core'
@@ -123,7 +124,7 @@ export function registerPomodoroIPC(): void {
 
     // Raycast confetti on work session completion
     if (sessionType === 'work' && config.confettiOnComplete) {
-      shell.openExternal('raycast://extensions/raycast/raycast/confetti').catch(() => {})
+      execFile('open', ['-g', 'raycast://extensions/raycast/raycast/confetti'], () => {})
     }
   })
 
