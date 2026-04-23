@@ -143,11 +143,29 @@ export interface UploaderConfig {
   cacheThumbnails: boolean
 }
 
+export interface HotkeyConfig {
+  palette: string // Electron Accelerator, e.g. 'CommandOrControl+Shift+Space'
+}
+
 export interface AppConfig {
   pomodoro: PomodoroConfig
   ui: UIConfig
   tracker: TrackerConfig
   uploader: UploaderConfig
+  hotkey: HotkeyConfig
+}
+
+// --- Command Palette ---
+
+/** Serializable command shape sent to the renderer */
+export interface CommandItem {
+  id: string
+  title: string
+  subtitle?: string
+  group?: string
+  icon?: string
+  keywords?: string[]
+  dangerous?: boolean
 }
 
 // --- Tracker ---

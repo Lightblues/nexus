@@ -22,7 +22,8 @@ import type {
   ImageMeta,
   CompressResult,
   UploadRecord,
-  UploadResult
+  UploadResult,
+  CommandItem
 } from '@shared/types'
 
 interface WindowApi {
@@ -89,6 +90,12 @@ interface WindowApi {
     copyUrl: (url: string) => Promise<{ success: boolean }>
     getThumbnail: (id: string) => Promise<number[] | null>
     onImageDropped: (callback: (data: { buffer: number[]; filename: string }) => void) => () => void
+  }
+  palette: {
+    list: () => Promise<CommandItem[]>
+    execute: (id: string) => Promise<{ message?: string; closePalette?: boolean }>
+    close: () => Promise<void>
+    onOpened: (callback: () => void) => () => void
   }
 }
 

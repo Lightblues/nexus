@@ -26,12 +26,17 @@ src/
 │   │   ├── TrayManager.ts      # Icon, title, click, file drop
 │   │   ├── PopupWindow.ts      # Frameless popover
 │   │   ├── MainWindow.ts       # Standard window (stats/settings/tracker)
+│   │   ├── PaletteWindow.ts    # Frameless centered command palette
+│   │   ├── GlobalHotkey.ts     # electron globalShortcut wrapper
+│   │   ├── UrlSchemeHandler.ts # nexus:// protocol → CommandRegistry
+│   │   ├── CommandRegistry.ts  # Single table of commands (palette + URL share)
 │   │   ├── PermissionManager.ts # macOS accessibility permission
 │   │   └── Logger.ts           # electron-log wrapper
 │   ├── features/
-│   │   ├── pomodoro/           # Timer + stats
+│   │   ├── pomodoro/           # Timer + stats + commands
 │   │   ├── tracker/            # Auto window tracking
 │   │   ├── uploader/           # Image upload to GitHub
+│   │   ├── palette/            # Command palette IPC
 │   │   └── settings/           # Config editor
 │   └── index.ts                # Entry: init core → register IPC → start services
 ├── preload/

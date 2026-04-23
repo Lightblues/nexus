@@ -3,12 +3,14 @@ import Dashboard from './features/dashboard/Dashboard'
 import PomodoroView from './features/pomodoro/PomodoroView'
 import { UploaderView } from './features/uploader'
 import { MainWindowLayout } from './features/main'
+import PaletteView from './features/palette/PaletteView'
 import { ErrorBoundary } from './components'
 
-type View = 'dashboard' | 'pomodoro' | 'uploader' | 'main'
+type View = 'dashboard' | 'pomodoro' | 'uploader' | 'main' | 'palette'
 
 function getInitialView(): View {
   const hash = window.location.hash
+  if (hash.startsWith('#/palette')) return 'palette'
   // Main window routes: stats, settings, tracker
   if (
     hash.startsWith('#/stats') ||
@@ -25,12 +27,21 @@ export default function App() {
 
   // Auto-switch to uploader view when image is dropped on tray
   useEffect(() => {
-    if (getInitialView() === 'main') return
+    if (getInitialView() !== 'dashboard' && getInitialView() !== 'pomodoro' && getInitialView() !== 'uploader') return
     const cleanup = window.api.uploader.onImageDropped(() => {
       setView('uploader')
     })
     return cleanup
   }, [])
+
+  // Palette window: transparent root so the rounded card shows its shadow
+  if (view === 'palette') {
+    return (
+      <ErrorBoundary fallbackLabel="Palette">
+        <PaletteView />
+      </ErrorBoundary>
+    )
+  }
 
   // MainWindow with sidebar navigation (stats/settings)
   if (view === 'main') {

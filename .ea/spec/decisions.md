@@ -98,3 +98,31 @@
 - All scripts use `pnpm` instead of `npm run`
 
 **Consequence**: `npm install` or `yarn install` → immediate error. Electron binary installs correctly via whitelisted postinstall scripts.
+
+---
+
+## ADR-009: CommandRegistry as unified invocation surface
+**Date**: 2026-04
+**Status**: Accepted
+
+**Context**: Needed a Raycast-like command palette (global hotkey → searchable list → action) and external URL-scheme triggering (`nexus://command/...`) so other apps / Shortcuts / CLI tools can drive Nexus. Naively these are two separate systems.
+
+**Decision**: Single `CommandRegistry` (in `src/main/core/CommandRegistry.ts`) is the source of truth. Features register commands; both the palette UI (via IPC `palette:list` / `palette:execute`) and the URL-scheme handler (`urlSchemeHandler.handle`) are read-only consumers of the registry. A command is `{ id, title, subtitle?, group?, keywords?, when?, run }` — with `subtitle` allowed to be a function so entries can show live state (e.g. `running · 12:34`).
+
+**Rejected alternatives**:
+- **Expose as a Raycast extension instead of building a palette**: requires users to run Raycast, adds IPC/HTTP hop, limited UI customization, per-command hotkey binding gated behind Raycast Pro. Reverse direction is fine — users can still add a thin Raycast Quicklink that calls `nexus://command/...`.
+- **Separate palette-command and URL-command tables**: duplicate registration effort, `when` semantics would drift.
+
+**Consequence**: Adding a command = one file (`features/<x>/commands.ts`). Palette discovers it automatically, URL scheme can invoke it automatically. `when` predicates are uniform. `dangerous: true` provides a future hook for URL-scheme confirmation prompts.
+
+---
+
+## ADR-010: Global hotkey default = `Cmd+Shift+Space`
+**Date**: 2026-04
+**Status**: Accepted
+
+**Context**: Need a default that doesn't conflict with Spotlight (Cmd+Space), Raycast (Opt+Space), or macOS input-source switcher (Ctrl+Space + Ctrl+Opt+Space). User explicitly reserved `Opt+Space` for Raycast.
+
+**Decision**: Default to `CommandOrControl+Shift+Space`. Configurable via `config.yaml` → `hotkey.palette` with hot-reload (re-register on `config:updated`).
+
+**Consequence**: Coexists cleanly with Spotlight + Raycast. The `Shift` modifier keeps it in the same muscle-memory family ("space-to-search") while being clearly distinct. If the accelerator fails to register (another app grabbed it), a logger.error is emitted but the app continues to run.

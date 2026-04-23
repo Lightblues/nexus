@@ -22,7 +22,8 @@ import type {
   ImageMeta,
   CompressResult,
   UploadRecord,
-  UploadResult
+  UploadResult,
+  CommandItem
 } from '@shared/types'
 
 const api = {
@@ -120,6 +121,17 @@ const api = {
       const handler = (_event: Electron.IpcRendererEvent, data: { buffer: number[]; filename: string }) => callback(data)
       ipcRenderer.on(IPC.uploader.imageDropped, handler)
       return () => ipcRenderer.removeListener(IPC.uploader.imageDropped, handler)
+    }
+  },
+  palette: {
+    list: (): Promise<CommandItem[]> => ipcRenderer.invoke(IPC.palette.list),
+    execute: (id: string): Promise<{ message?: string; closePalette?: boolean }> =>
+      ipcRenderer.invoke(IPC.palette.execute, id),
+    close: (): Promise<void> => ipcRenderer.invoke(IPC.palette.close),
+    onOpened: (callback: () => void): (() => void) => {
+      const handler = () => callback()
+      ipcRenderer.on(IPC.palette.opened, handler)
+      return () => ipcRenderer.removeListener(IPC.palette.opened, handler)
     }
   }
 }

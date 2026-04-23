@@ -13,7 +13,7 @@ pomodoro:
     - work
     - study
     - personal
-  
+
   showPopoverOnComplete: false
   autoStartBreak: true         # auto-start break after focus ends
   autoStartBreakDelay: 3       # seconds before break auto-starts
@@ -31,3 +31,9 @@ tracker:
   enrichApps:              # apps to extract extra context from
     - Code
     - Google Chrome
+
+# Global shortcut for the command palette.
+# Electron Accelerator syntax: https://www.electronjs.org/docs/latest/api/accelerator
+# Default: Cmd+Shift+Space (macOS). Avoid Cmd+Space (Spotlight) and Opt+Space (Raycast).
+hotkey:
+  palette: "CommandOrControl+Shift+Space"

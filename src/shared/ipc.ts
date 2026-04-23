@@ -40,6 +40,13 @@ export const IPC = {
     openStats: 'window:open-stats',
     openSettings: 'window:open-settings',
   },
+  palette: {
+    list: 'palette:list',
+    execute: 'palette:execute',
+    close: 'palette:close',
+    // Events (main → renderer)
+    opened: 'palette:opened',
+  },
   tracker: {
     getStatus: 'tracker:get-status',
     getDay: 'tracker:get-day',

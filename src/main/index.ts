@@ -1,15 +1,30 @@
 import { app } from 'electron'
-import { pathManager, configManager, dataManager, logger, trayManager, popupWindow, mainWindow } from './core'
-import { registerPomodoroIPC, registerStatsIPC } from './features/pomodoro'
+import {
+  pathManager,
+  configManager,
+  dataManager,
+  logger,
+  trayManager,
+  popupWindow,
+  mainWindow,
+  paletteWindow,
+  globalHotkey,
+  urlSchemeHandler
+} from './core'
+import { registerPomodoroIPC, registerStatsIPC, registerPomodoroCommands } from './features/pomodoro'
 import { registerSettingsIPC } from './features/settings'
 import { trackerService, registerTrackerIPC } from './features/tracker'
 import { uploaderService, registerUploaderIPC } from './features/uploader'
+import { registerPaletteIPC } from './features/palette'
 
-// Prevent multiple instances
+// Prevent multiple instances (required so URL-scheme 'second-instance' event fires)
 const gotTheLock = app.requestSingleInstanceLock()
 if (!gotTheLock) {
   app.quit()
 }
+
+// Register URL scheme early — `open-url` can fire before app.whenReady()
+urlSchemeHandler.register()
 
 
 app.whenReady().then(() => {
@@ -24,6 +39,10 @@ app.whenReady().then(() => {
     // Initialize UI
     trayManager.init()
     popupWindow.create()
+    paletteWindow.create()
+
+    // Register commands (must come before IPC registration that reads the registry)
+    registerPomodoroCommands()
 
     // Register IPC
     registerPomodoroIPC()
@@ -31,11 +50,16 @@ app.whenReady().then(() => {
     registerSettingsIPC()
     registerTrackerIPC()
     registerUploaderIPC()
+    registerPaletteIPC()
 
     // Start services
     trackerService.start()
     uploaderService.init()
-    configManager.on('config:updated', () => trackerService.onConfigUpdate())
+    globalHotkey.register()
+    configManager.on('config:updated', () => {
+      trackerService.onConfigUpdate()
+      globalHotkey.reload()
+    })
 
     logger.info('EA Nexus started')
   } catch (err) {
@@ -55,8 +79,10 @@ app.on('activate', () => {
 app.on('before-quit', () => {
   trackerService.stop()
   configManager.stopWatching()
+  globalHotkey.destroy()
   trayManager.destroy()
   popupWindow.destroy()
+  paletteWindow.destroy()
   mainWindow.destroy()
   logger.info('EA Nexus shutting down')
 })

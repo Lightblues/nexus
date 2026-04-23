@@ -3,9 +3,9 @@ import * as yaml from 'js-yaml'
 import { EventEmitter } from 'events'
 import { pathManager } from './PathManager'
 import { logger } from './Logger'
-import type { AppConfig, PomodoroConfig, UIConfig, TrackerConfig, UploaderConfig } from '@shared/types'
+import type { AppConfig, PomodoroConfig, UIConfig, TrackerConfig, UploaderConfig, HotkeyConfig } from '@shared/types'
 
-export type { AppConfig, PomodoroConfig, UIConfig, TrackerConfig, UploaderConfig }
+export type { AppConfig, PomodoroConfig, UIConfig, TrackerConfig, UploaderConfig, HotkeyConfig }
 
 const DEFAULT_CONFIG: AppConfig = {
   pomodoro: {
@@ -48,6 +48,9 @@ const DEFAULT_CONFIG: AppConfig = {
     },
     defaultPath: 'upload',
     cacheThumbnails: true
+  },
+  hotkey: {
+    palette: 'CommandOrControl+Shift+Space'
   }
 }
 
@@ -100,7 +103,8 @@ class ConfigManager extends EventEmitter {
         github: { ...DEFAULT_CONFIG.uploader.github, ...loaded.uploader?.github },
         cdn: { ...DEFAULT_CONFIG.uploader.cdn, ...loaded.uploader?.cdn },
         compress: { ...DEFAULT_CONFIG.uploader.compress, ...loaded.uploader?.compress }
-      }
+      },
+      hotkey: { ...DEFAULT_CONFIG.hotkey, ...loaded.hotkey }
     }
   }
 

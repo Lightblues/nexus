@@ -24,6 +24,10 @@ mac:
   type: distribution
   category: public.app-category.productivity
   artifactName: '${productName}-${version}-${arch}.${ext}'
+protocols:
+  - name: Nexus URL Scheme
+    schemes:
+      - nexus
 dmg:
   contents:
     - x: 130

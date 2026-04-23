@@ -1,5 +1,41 @@
 # Changelog
 
+## Unreleased — Command Palette
+
+### New
+- **Global command palette**: `Cmd+Shift+Space` opens a Raycast-style launcher. Fuzzy search, ↑/↓ + Enter keyboard nav, live subtitles showing pomodoro state. (ADR-009, ADR-010)
+- **URL scheme `nexus://`**: Other apps can trigger Nexus commands via `nexus://command/<id>?args=…`. Registered via `electron-builder.yml` → `protocols` and `app.setAsDefaultProtocolClient`.
+- **Pomodoro commands**: `pomodoro.toggle` (smart start/pause/resume), `pomodoro.start`, `pomodoro.pause`, `pomodoro.resume`, `pomodoro.finishEarly`, `pomodoro.exit`.
+- **Config**: new `hotkey.palette` key (Electron Accelerator syntax) with hot-reload.
+
+### Files Changed
+```
+New:
+  src/main/core/CommandRegistry.ts
+  src/main/core/PaletteWindow.ts
+  src/main/core/GlobalHotkey.ts
+  src/main/core/UrlSchemeHandler.ts
+  src/main/features/pomodoro/commands.ts
+  src/main/features/palette/{index,palette.ipc}.ts
+  src/renderer/src/features/palette/PaletteView.tsx
+  .ea/spec/palette.md
+
+Modified:
+  src/shared/types.ts            — HotkeyConfig, CommandItem
+  src/shared/ipc.ts              — IPC.palette.*
+  src/preload/index.ts           — palette.{list,execute,close,onOpened}
+  src/renderer/src/env.d.ts      — palette API types
+  src/renderer/src/App.tsx       — #/palette route
+  src/main/core/{index,ConfigManager}.ts
+  src/main/features/pomodoro/index.ts — registerPomodoroCommands
+  src/main/index.ts              — palette/hotkey/URL wiring
+  resources/default-config.yaml  — hotkey block
+  electron-builder.yml           — protocols: nexus
+  .ea/spec/{spec,architecture,decisions}.md
+```
+
+---
+
 ## v0.4.0 (2026-04-16) — Architecture Refactor
 
 ### P0 Fixes
