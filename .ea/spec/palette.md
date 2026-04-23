@@ -45,7 +45,7 @@ Loaded via URL hash `#/palette` — the existing renderer handles it alongside
 | Search input | Autofocused on show; text is selected so the next keystroke replaces the previous query |
 | Results | Substring-first scoring, subsequence fallback; fields ranked: title > group > keywords > subtitle |
 | Keyboard | ↑/↓ navigate, `Enter` run, `Esc` close; hover selects |
-| Footer | Toast messages (success/failure), result count, key hints |
+| Footer | Home icon (→ `window.openMain`) · toast messages (success/failure) · result count · key hints |
 | Discoverability | Empty query → all currently-applicable commands (VSCode command-palette style) |
 
 ## URL Scheme
@@ -76,6 +76,10 @@ work).
 | `pomodoro.resume` | paused | Resume paused session |
 | `pomodoro.finishEarly` | running/paused (work) | Record session and move to finished |
 | `pomodoro.exit` | non-idle | Discard current session (dangerous) |
+| `window.openMain` | always | Open main window (default route = stats) |
+| `window.openStats` | always | Open main window at `/stats` |
+| `window.openTracker` | always | Open main window at `/tracker` |
+| `window.openSettings` | always | Open main window at `/settings` |
 
 Subtitles are dynamic — e.g. `pomodoro.toggle` shows `running · 12:34 · click to pause`.
 

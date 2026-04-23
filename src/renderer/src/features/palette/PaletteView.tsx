@@ -253,16 +253,57 @@ export default function PaletteView() {
       {/* Footer */}
       <div
         style={{
-          padding: '6px 18px',
+          padding: '6px 10px 6px 12px',
           borderTop: '1px solid var(--border)',
           fontSize: '10px',
           color: 'var(--text-secondary)',
           display: 'flex',
-          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: '8px',
           flexShrink: 0
         }}
       >
-        <span>{toast || `${filtered.length} command${filtered.length === 1 ? '' : 's'}`}</span>
+        {/* Home: opens the main window. Registered as `window.openMain` so
+            it also appears in the list and can be invoked via URL scheme. */}
+        <button
+          onClick={() => window.api.palette.execute('window.openMain')}
+          title="Open Main Window"
+          style={{
+            border: 'none',
+            background: 'transparent',
+            cursor: 'pointer',
+            padding: '4px 6px',
+            borderRadius: '4px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            color: 'var(--text-primary)',
+            fontSize: '11px'
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-card)')}
+          onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+        >
+          {/* inline home svg — no extra asset dep */}
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M3 10.5 12 3l9 7.5" />
+            <path d="M5 9v11a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9" />
+          </svg>
+          <span>Nexus</span>
+        </button>
+
+        <span style={{ flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {toast || `${filtered.length} command${filtered.length === 1 ? '' : 's'}`}
+        </span>
+
         <span>↑↓ navigate · ⏎ run · esc close</span>
       </div>
     </div>

@@ -16,6 +16,7 @@ import { registerSettingsIPC } from './features/settings'
 import { trackerService, registerTrackerIPC } from './features/tracker'
 import { uploaderService, registerUploaderIPC } from './features/uploader'
 import { registerPaletteIPC } from './features/palette'
+import { registerWindowCommands } from './features/window'
 
 // Prevent multiple instances (required so URL-scheme 'second-instance' event fires)
 const gotTheLock = app.requestSingleInstanceLock()
@@ -43,6 +44,7 @@ app.whenReady().then(() => {
 
     // Register commands (must come before IPC registration that reads the registry)
     registerPomodoroCommands()
+    registerWindowCommands()
 
     // Register IPC
     registerPomodoroIPC()

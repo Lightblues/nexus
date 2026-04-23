@@ -6,6 +6,7 @@
 - **Global command palette**: `Cmd+Shift+Space` opens a Raycast-style launcher. Fuzzy search, ↑/↓ + Enter keyboard nav, live subtitles showing pomodoro state. (ADR-009, ADR-010)
 - **URL scheme `nexus://`**: Other apps can trigger Nexus commands via `nexus://command/<id>?args=…`. Registered via `electron-builder.yml` → `protocols` and `app.setAsDefaultProtocolClient`.
 - **Pomodoro commands**: `pomodoro.toggle` (smart start/pause/resume), `pomodoro.start`, `pomodoro.pause`, `pomodoro.resume`, `pomodoro.finishEarly`, `pomodoro.exit`.
+- **Window commands**: `window.openMain` / `openStats` / `openTracker` / `openSettings` — also surfaced as a home icon in the palette footer (click → main window).
 - **Config**: new `hotkey.palette` key (Electron Accelerator syntax) with hot-reload.
 
 ### Files Changed
@@ -17,6 +18,7 @@ New:
   src/main/core/UrlSchemeHandler.ts
   src/main/features/pomodoro/commands.ts
   src/main/features/palette/{index,palette.ipc}.ts
+  src/main/features/window/{index,commands}.ts
   src/renderer/src/features/palette/PaletteView.tsx
   .ea/spec/palette.md
 
