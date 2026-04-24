@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.5.1 (2026-04-24) — Fix ad-hoc codesign
+
+### Fixes
+- **Fix crash on launch**: v0.5.0 used `codesign --deep --sign -` via a custom `afterPack` hook, which signs Electron's nested bundles in the wrong order (outside-in), causing macOS dyld to reject the app with "different Team IDs". Replaced with `mac.identity: '-'` in `electron-builder.yml`, which delegates to `@electron/osx-sign` — the official Electron signing tool that correctly signs inside-out.
+- Removed `build/after-pack.cjs` (broken hook).
+
+---
+
 ## v0.5.0 (2026-04-24) — Rename + Homebrew Distribution
 
 ### Breaking
