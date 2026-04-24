@@ -1,3 +1,8 @@
 out/
 dist/
 node_modules/
+
+# Global gitignore excludes `build/` directories; re-include the files we
+# actually need in this project (electron-builder expects them here).
+!build/
+!build/*

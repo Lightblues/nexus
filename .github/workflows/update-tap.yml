@@ -1,0 +1,70 @@
+name: Update Homebrew Tap
+
+# Runs after a Nexus release is published on this repo.
+# Downloads the published DMGs, computes sha256, and updates the cask in
+# lightblues/homebrew-tap so `brew install --cask lightblues/tap/nexus`
+# picks up the new version automatically.
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  update-cask:
+    # Only run for nexus-v* tags (this workflow may coexist with other release types)
+    if: startsWith(github.event.release.tag_name, 'nexus-v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract version
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/nexus-v}" >> $GITHUB_OUTPUT
+
+      - name: Compute DMG sha256
+        id: hash
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          BASE="https://github.com/${{ github.repository }}/releases/download/nexus-v${VERSION}"
+          ARM_DMG="Nexus-${VERSION}-arm64.dmg"
+          INTEL_DMG="Nexus-${VERSION}-x64.dmg"
+
+          curl -sL -o arm.dmg   "${BASE}/${ARM_DMG}"
+          curl -sL -o intel.dmg "${BASE}/${INTEL_DMG}"
+
+          echo "ARM_SHA=$(sha256sum arm.dmg   | awk '{print $1}')" >> $GITHUB_OUTPUT
+          echo "INTEL_SHA=$(sha256sum intel.dmg | awk '{print $1}')" >> $GITHUB_OUTPUT
+
+      - name: Checkout homebrew-tap
+        uses: actions/checkout@v4
+        with:
+          repository: lightblues/homebrew-tap
+          token: ${{ secrets.TAP_PUSH_TOKEN }}
+          path: tap
+
+      - name: Update cask file
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          ARM_SHA="${{ steps.hash.outputs.ARM_SHA }}"
+          INTEL_SHA="${{ steps.hash.outputs.INTEL_SHA }}"
+          CASK=tap/Casks/nexus.rb
+
+          python3 - <<PY
+          import re, pathlib
+          p = pathlib.Path("${CASK}")
+          s = p.read_text()
+          s = re.sub(r'version "[^"]+"',           f'version "${VERSION}"', s, count=1)
+          s = re.sub(r'arm:\s*"[0-9a-f]{64}"',     f'arm:   "${ARM_SHA}"', s, count=1)
+          s = re.sub(r'intel:\s*"[0-9a-f]{64}"',   f'intel: "${INTEL_SHA}"', s, count=1)
+          p.write_text(s)
+          PY
+
+          cat "$CASK"
+
+      - name: Commit and push
+        working-directory: tap
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Casks/nexus.rb
+          git diff --cached --quiet && { echo "No changes"; exit 0; }
+          git commit -m "nexus: bump to ${{ steps.version.outputs.VERSION }}"
+          git push
