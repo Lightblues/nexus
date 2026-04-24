@@ -1,5 +1,43 @@
 # Changelog
 
+## v0.5.0 (2026-04-24) — Rename + Homebrew Distribution
+
+### Breaking
+- **Renamed `EA Nexus` → `Nexus`**. App bundle is now `Nexus.app`, DMG is `Nexus-<ver>-<arch>.dmg`.
+- **`appId` changed** `com.ea.nexus` → `site.easonsi.nexus`. ⚠️ macOS tracks Accessibility permission by `appId`, so existing users must **re-grant** Accessibility permission (System Settings → Privacy & Security → Accessibility → enable Nexus) for the Tracker to resume working. Pomodoro/Uploader are unaffected.
+- **`package.json` name** `ea-nexus` → `nexus` (internal only, no user impact).
+
+### New — Homebrew Distribution
+- **Homebrew tap**: [`lightblues/homebrew-tap`](https://github.com/Lightblues/homebrew-tap). Install via:
+  ```bash
+  brew install --cask lightblues/tap/nexus
+  ```
+- **Ad-hoc codesign** (`build/after-pack.cjs`): since Nexus has no Apple Developer ID, the CI build applies `codesign --sign -` to the `.app` bundle. Without this, Apple Silicon macOS rejects the app with `killed: 9`.
+- **Cask `postflight`** strips `com.apple.quarantine` so users don't see the "Apple could not verify" Gatekeeper dialog on first launch.
+- **Auto cask bump** (`.github/workflows/update-tap.yml`): on every `nexus-v*` release, the workflow computes SHA256 of the published DMGs and commits a version/sha256 bump to `homebrew-tap/Casks/nexus.rb`. Requires `TAP_PUSH_TOKEN` secret (fine-grained PAT with Contents:write on `homebrew-tap`).
+
+### Files Changed
+```
+New:
+  build/after-pack.cjs                       — ad-hoc codesign hook
+  .github/workflows/update-tap.yml           — auto cask bump
+
+Modified:
+  electron-builder.yml                       — afterPack hook wired in
+  package.json                               — name, version, description
+  .github/workflows/build.yml                — workflow/artifact/release names
+  scripts/install-release.sh                 — APP_NAME/DMG_NAME
+  resources/default-config.yaml              — comment
+  src/main/core/{TrayManager,MainWindow,PermissionManager}.ts
+  src/main/index.ts                          — logger messages
+  src/main/features/uploader/GitHubUploader.ts
+  src/renderer/index.html                    — <title>
+  src/renderer/src/features/{dashboard,main,tracker}/*.tsx
+  .ea/spec/{spec,architecture}.md, .ea/runs.sh
+```
+
+---
+
 ## Unreleased — Command Palette
 
 ### New
