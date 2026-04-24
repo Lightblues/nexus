@@ -91,3 +91,51 @@ jobs:
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # --- Update Homebrew tap (inline, avoids GITHUB_TOKEN event limitation) ---
+
+      - name: Compute DMG sha256
+        id: hash
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          ARM_DMG=$(find artifacts -name "*-arm64*.dmg" | head -1)
+          INTEL_DMG=$(find artifacts -name "*-x64*.dmg" | head -1)
+
+          echo "ARM_SHA=$(sha256sum "$ARM_DMG"   | awk '{print $1}')" >> $GITHUB_OUTPUT
+          echo "INTEL_SHA=$(sha256sum "$INTEL_DMG" | awk '{print $1}')" >> $GITHUB_OUTPUT
+
+      - name: Checkout homebrew-tap
+        uses: actions/checkout@v4
+        with:
+          repository: lightblues/homebrew-tap
+          token: ${{ secrets.TAP_PUSH_TOKEN }}
+          path: tap
+
+      - name: Update cask file
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          ARM_SHA="${{ steps.hash.outputs.ARM_SHA }}"
+          INTEL_SHA="${{ steps.hash.outputs.INTEL_SHA }}"
+          CASK=tap/Casks/nexus.rb
+
+          python3 - <<PY
+          import re, pathlib
+          p = pathlib.Path("${CASK}")
+          s = p.read_text()
+          s = re.sub(r'version "[^"]+"',           f'version "${VERSION}"', s, count=1)
+          s = re.sub(r'arm:\s*"[0-9a-f]{64}"',     f'arm:   "${ARM_SHA}"', s, count=1)
+          s = re.sub(r'intel:\s*"[0-9a-f]{64}"',   f'intel: "${INTEL_SHA}"', s, count=1)
+          p.write_text(s)
+          PY
+
+          cat "$CASK"
+
+      - name: Push cask update
+        working-directory: tap
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Casks/nexus.rb
+          git diff --cached --quiet && { echo "No changes"; exit 0; }
+          git commit -m "nexus: bump to ${{ steps.version.outputs.VERSION }}"
+          git push
