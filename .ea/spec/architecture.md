@@ -4,11 +4,13 @@
 **Nexus** — macOS menu bar toolkit (Pomodoro timer, image uploader, time tracker).
 
 - **Platform**: macOS (Menu Bar interaction)
+- **Bundle ID**: `site.easonsi.nexus`
 - **Data/Config**: `~/.ea/nexus/`
 - **Tech Stack**: Electron + Vite + React + TypeScript
 - **Package Manager**: pnpm (enforced via `preinstall` hook + `engines`)
 - **Architecture**: Main-Process-as-Source-of-Truth, modular features
 - **UX Pattern**: Tray Popover (Menubar Icon → Click → Floating Frameless Window)
+- **Distribution**: Homebrew cask via [`lightblues/homebrew-tap`](https://github.com/Lightblues/homebrew-tap)
 
 ## Directory Structure
 
@@ -136,3 +138,44 @@ useEffect(() => {
   return cleanup
 }, [])
 ```
+
+## Distribution & CI
+
+### Install
+```bash
+brew install --cask lightblues/tap/nexus
+```
+
+### Build & Release Pipeline (`build.yml`)
+Tag-triggered single workflow handles the full release cycle:
+
+```
+git tag nexus-vX.Y.Z && git push --tags
+    ↓
+build job (macos-latest):
+  pnpm install → pnpm build → electron-builder --mac --arm64/x64
+  electron-builder applies ad-hoc codesign via mac.identity: '-'
+    ↓
+release job (ubuntu-latest):
+  Create GitHub Release with DMGs
+  Compute sha256 from downloaded artifacts
+  Push version + sha256 bump to lightblues/homebrew-tap/Casks/nexus.rb
+    ↓
+brew upgrade --cask nexus picks up new version
+```
+
+### Code Signing (no Apple Developer ID)
+- **Ad-hoc codesign**: `electron-builder.yml` → `mac.identity: '-'` delegates to `@electron/osx-sign`, which signs nested frameworks/helpers inside-out (correct for Electron's bundle structure). Do **not** use `codesign --deep` manually — it signs outside-in and breaks the nested signature chain. (ADR-011)
+- **Quarantine strip**: Homebrew cask `postflight` runs `xattr -dr com.apple.quarantine` so users don't see the Gatekeeper "cannot verify developer" dialog.
+- **Consequence**: App launches cleanly on Apple Silicon and Intel without developer account. Users must trust the tap.
+
+### Homebrew Tap (`lightblues/homebrew-tap`)
+- Cask definition: `Casks/nexus.rb` — architecture-aware (`arch arm: "arm64", intel: "x64"`), per-arch sha256.
+- Auto-bump: `build.yml` release job pushes cask updates via `TAP_PUSH_TOKEN` secret (fine-grained PAT, Contents:write on `homebrew-tap`).
+- Fallback: `update-tap.yml` (`workflow_dispatch` only) for manual re-runs.
+- One tap can host multiple casks/formulae for future projects.
+
+### Secrets
+| Secret | Repo | Purpose |
+|--------|------|---------|
+| `TAP_PUSH_TOKEN` | `Lightblues/nexus` | Fine-grained PAT (Contents:write on `homebrew-tap`). Used by release job to push cask updates. |

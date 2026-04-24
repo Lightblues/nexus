@@ -20,20 +20,19 @@
   ```bash
   brew install --cask lightblues/tap/nexus
   ```
-- **Ad-hoc codesign** (`build/after-pack.cjs`): since Nexus has no Apple Developer ID, the CI build applies `codesign --sign -` to the `.app` bundle. Without this, Apple Silicon macOS rejects the app with `killed: 9`.
+- **Ad-hoc codesign** (`mac.identity: '-'` in `electron-builder.yml`): since Nexus has no Apple Developer ID, electron-builder applies ad-hoc signing via `@electron/osx-sign` which handles Electron's nested bundles correctly. (ADR-011)
 - **Cask `postflight`** strips `com.apple.quarantine` so users don't see the "Apple could not verify" Gatekeeper dialog on first launch.
-- **Auto cask bump** (`.github/workflows/update-tap.yml`): on every `nexus-v*` release, the workflow computes SHA256 of the published DMGs and commits a version/sha256 bump to `homebrew-tap/Casks/nexus.rb`. Requires `TAP_PUSH_TOKEN` secret (fine-grained PAT with Contents:write on `homebrew-tap`).
+- **Auto cask bump**: inlined in `build.yml` release job — on every `nexus-v*` tag, after creating the GitHub Release, the job computes SHA256 and pushes a version bump to `homebrew-tap/Casks/nexus.rb`. Fallback: `update-tap.yml` (workflow_dispatch). Requires `TAP_PUSH_TOKEN` secret. (ADR-012)
 
 ### Files Changed
 ```
 New:
-  build/after-pack.cjs                       — ad-hoc codesign hook
-  .github/workflows/update-tap.yml           — auto cask bump
+  .github/workflows/update-tap.yml           — manual cask bump fallback
 
 Modified:
-  electron-builder.yml                       — afterPack hook wired in
+  electron-builder.yml                       — identity: '-' for ad-hoc codesign
+  .github/workflows/build.yml                — workflow/artifact/release names + inline tap-update
   package.json                               — name, version, description
-  .github/workflows/build.yml                — workflow/artifact/release names
   scripts/install-release.sh                 — APP_NAME/DMG_NAME
   resources/default-config.yaml              — comment
   src/main/core/{TrayManager,MainWindow,PermissionManager}.ts
@@ -41,7 +40,7 @@ Modified:
   src/main/features/uploader/GitHubUploader.ts
   src/renderer/index.html                    — <title>
   src/renderer/src/features/{dashboard,main,tracker}/*.tsx
-  .ea/spec/{spec,architecture}.md, .ea/runs.sh
+  .ea/spec/{spec,architecture,decisions}.md, .ea/runs.sh
 ```
 
 ---

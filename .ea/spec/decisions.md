@@ -126,3 +126,37 @@
 **Decision**: Default to `CommandOrControl+Shift+Space`. Configurable via `config.yaml` → `hotkey.palette` with hot-reload (re-register on `config:updated`).
 
 **Consequence**: Coexists cleanly with Spotlight + Raycast. The `Shift` modifier keeps it in the same muscle-memory family ("space-to-search") while being clearly distinct. If the accelerator fails to register (another app grabbed it), a logger.error is emitted but the app continues to run.
+
+---
+
+## ADR-011: Ad-hoc codesign via electron-builder identity, not --deep
+**Date**: 2026-04
+**Status**: Accepted
+
+**Context**: Nexus has no Apple Developer ID ($99/year). Without any code signature, Apple Silicon macOS kills the process at launch (`killed: 9`). An initial attempt used a custom `afterPack` hook with `codesign --force --deep --sign -`, but `--deep` signs outside-in, breaking Electron's nested bundle signature chain (main app → Electron Framework → helpers). macOS dyld then rejects the app with "mapping process and mapped file have different Team IDs".
+
+**Decision**: Use `mac.identity: '-'` in `electron-builder.yml`. This delegates to `@electron/osx-sign` (Electron's official signing tool), which knows the correct inside-out order for Electron apps. Combined with the Homebrew cask `postflight` that strips `com.apple.quarantine`, users get a zero-friction install without Gatekeeper prompts.
+
+**Rejected alternatives**:
+- `codesign --deep --sign -` in afterPack: outside-in order breaks nested bundles.
+- No signing at all: arm64 macOS refuses to launch unsigned binaries.
+- Paid Apple Developer ID: $99/year, overkill for a personal tool.
+
+**Consequence**: CI builds produce ad-hoc signed `.app` bundles that launch on both arm64 and x64 without Gatekeeper intervention (after quarantine strip). If Apple tightens ad-hoc signing rules in future macOS versions, a Developer ID may become necessary.
+
+---
+
+## ADR-012: Homebrew tap for distribution
+**Date**: 2026-04
+**Status**: Accepted
+
+**Context**: Need a one-command install path for users. Official `homebrew-cask` requires signed + notarized apps (rejected without Apple Developer ID). Manual DMG download + drag-to-Applications + right-click-open is too many steps.
+
+**Decision**: Self-hosted tap at `lightblues/homebrew-tap` with a cask definition (`Casks/nexus.rb`). The cask uses architecture-aware URLs (`arch arm: "arm64", intel: "x64"`), per-arch sha256 verification, and a `postflight` hook to strip quarantine. The tap is auto-bumped by the release job in `build.yml` — no separate workflow needed (GITHUB_TOKEN-created releases don't trigger other workflows due to GitHub's anti-recursion rule, so the tap-update steps are inlined in the same job). A `workflow_dispatch`-only `update-tap.yml` is kept as fallback.
+
+**Rejected alternatives**:
+- Official `homebrew-cask`: requires notarization.
+- GitHub Releases only: users must manually handle Gatekeeper.
+- Separate `update-tap.yml` triggered by `on: release`: GITHUB_TOKEN-created releases don't fire other workflows.
+
+**Consequence**: `brew install --cask lightblues/tap/nexus` — single command, auto-downloads correct architecture, strips quarantine, ready to run. Future projects can share the same tap.
