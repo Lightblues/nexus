@@ -8,16 +8,25 @@ name: Update Homebrew Tap
 on:
   release:
     types: [published]
+  # Allow manual re-run when the release event was missed (e.g. the first
+  # time this workflow was introduced, or after editing a release).
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to bump (e.g. nexus-v0.5.0)'
+        required: true
 
 jobs:
   update-cask:
     # Only run for nexus-v* tags (this workflow may coexist with other release types)
-    if: startsWith(github.event.release.tag_name, 'nexus-v')
+    if: startsWith(github.event.release.tag_name, 'nexus-v') || startsWith(github.event.inputs.tag, 'nexus-v')
     runs-on: ubuntu-latest
     steps:
       - name: Extract version
         id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/nexus-v}" >> $GITHUB_OUTPUT
+        run: |
+          TAG="${{ github.event.release.tag_name || github.event.inputs.tag }}"
+          echo "VERSION=${TAG#nexus-v}" >> $GITHUB_OUTPUT
 
       - name: Compute DMG sha256
         id: hash
