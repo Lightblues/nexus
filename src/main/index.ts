@@ -63,7 +63,7 @@ app.whenReady().then(() => {
       globalHotkey.reload()
     })
 
-    logger.info('EA Nexus started')
+    logger.info('Nexus started')
   } catch (err) {
     console.error('Failed to initialize:', err)
   }
@@ -86,5 +86,5 @@ app.on('before-quit', () => {
   popupWindow.destroy()
   paletteWindow.destroy()
   mainWindow.destroy()
-  logger.info('EA Nexus shutting down')
+  logger.info('Nexus shutting down')
 })

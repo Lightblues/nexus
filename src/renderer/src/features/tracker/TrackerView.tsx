@@ -144,7 +144,7 @@ export default function TrackerView() {
               </div>
               <div style={{ fontSize: '13px', color: 'var(--warning-text, #92400e)', opacity: 0.9 }}>
                 Time Tracker needs Accessibility permission to monitor active windows.
-                Go to System Settings → Privacy & Security → Accessibility, enable EA Nexus, then restart the app.
+                Go to System Settings → Privacy & Security → Accessibility, enable Nexus, then restart the app.
               </div>
             </div>
           </div>

@@ -1,4 +1,4 @@
-# EA Nexus Configuration
+# Nexus Configuration
 pomodoro:
   workDuration: 25        # minutes
   shortBreakDuration: 5   # minutes

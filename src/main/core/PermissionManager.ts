@@ -30,7 +30,7 @@ class PermissionManager {
     // Show system notification
     if (Notification.isSupported()) {
       const notification = new Notification({
-        title: 'EA Nexus - Permission Required',
+        title: 'Nexus - Permission Required',
         body: 'Time Tracker needs Accessibility permission. Click to open Settings.',
         silent: false
       })
@@ -45,10 +45,10 @@ class PermissionManager {
         title: 'Permission Required',
         message: 'Time Tracker requires Accessibility permission',
         detail:
-          'To track active windows, EA Nexus needs Accessibility permission.\n\n' +
+          'To track active windows, Nexus needs Accessibility permission.\n\n' +
           '1. Click "Open Settings" to open System Settings\n' +
-          '2. Find and enable "EA Nexus" in the list\n' +
-          '3. Restart EA Nexus for changes to take effect\n\n' +
+          '2. Find and enable "Nexus" in the list\n' +
+          '3. Restart Nexus for changes to take effect\n\n' +
           'Time Tracker will be disabled until permission is granted.',
         buttons: ['Open Settings', 'Later'],
         defaultId: 0

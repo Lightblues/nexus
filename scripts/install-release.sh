@@ -1,5 +1,5 @@
 #!/bin/bash
-# Install EA Nexus from GitHub Release
+# Install Nexus from GitHub Release
 # Usage: ./install-release.sh [version]
 # If no version specified, reads from package.json
 
@@ -8,8 +8,8 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PACKAGE_JSON="${SCRIPT_DIR}/../package.json"
 REPO="Lightblues/easons_agent"
-APP_NAME="EA Nexus"
-DMG_NAME="EA.Nexus"
+APP_NAME="Nexus"
+DMG_NAME="Nexus"
 INSTALL_PATH="/Applications/${APP_NAME}.app"
 TMP_DIR=$(mktemp -d)
 

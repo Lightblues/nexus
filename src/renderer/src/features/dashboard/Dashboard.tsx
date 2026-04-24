@@ -9,7 +9,7 @@ export default function Dashboard({ onSelectPomodoro, onSelectUploader }: Dashbo
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <h1 style={{ fontSize: '18px', marginBottom: '16px', textAlign: 'center' }}>
-        EA Nexus
+        Nexus
       </h1>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', flex: 1 }}>

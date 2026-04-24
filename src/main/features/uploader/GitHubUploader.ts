@@ -46,7 +46,7 @@ export class GitHubUploader {
         owner,
         repo,
         path: fullPath,
-        message: `Upload ${filename} via EA Nexus`,
+        message: `Upload ${filename} via Nexus`,
         content,
         branch,
         sha
@@ -78,7 +78,7 @@ export class GitHubUploader {
         owner,
         repo,
         path,
-        message: `Delete ${path} via EA Nexus`,
+        message: `Delete ${path} via Nexus`,
         sha,
         branch
       })

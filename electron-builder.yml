@@ -1,5 +1,5 @@
-appId: com.ea.nexus
-productName: EA Nexus
+appId: site.easonsi.nexus
+productName: Nexus
 directories:
   buildResources: build
   output: dist

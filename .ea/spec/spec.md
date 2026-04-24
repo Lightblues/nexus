@@ -1,4 +1,4 @@
-# EA Nexus Spec
+# Nexus Spec
 
 Split into modules for maintainability:
 

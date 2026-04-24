@@ -41,7 +41,7 @@ class MainWindow {
       show: false,
       frame: true,
       resizable: true,
-      title: 'EA Nexus',
+      title: 'Nexus',
       webPreferences: {
         preload: join(__dirname, '../preload/index.js'),
         contextIsolation: true,

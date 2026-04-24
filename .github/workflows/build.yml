@@ -1,4 +1,4 @@
-name: Build EA Nexus
+name: Build Nexus
 
 on:
   workflow_dispatch:
@@ -49,7 +49,7 @@ jobs:
       - name: Upload arm64 artifact
         uses: actions/upload-artifact@v4
         with:
-          name: EA-Nexus-arm64
+          name: Nexus-arm64
           path: dist/*-arm64*.dmg
           if-no-files-found: error
           retention-days: 7
@@ -57,7 +57,7 @@ jobs:
       - name: Upload x64 artifact
         uses: actions/upload-artifact@v4
         with:
-          name: EA-Nexus-x64
+          name: Nexus-x64
           path: dist/*-x64*.dmg
           if-no-files-found: error
           retention-days: 7
@@ -84,7 +84,7 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          name: EA Nexus v${{ steps.version.outputs.VERSION }}
+          name: Nexus v${{ steps.version.outputs.VERSION }}
           draft: false
           prerelease: false
           files: artifacts/**/*.dmg

@@ -14,7 +14,7 @@ class TrayManager extends EventEmitter {
     const icon = this.createDefaultIcon()
     this.tray = new Tray(icon)
     this.tray.setTitle('')
-    this.tray.setToolTip('EA Nexus')
+    this.tray.setToolTip('Nexus')
 
     // Left click: toggle popover
     this.tray.on('click', (_event, bounds) => {
@@ -26,7 +26,7 @@ class TrayManager extends EventEmitter {
       const contextMenu = Menu.buildFromTemplate([
         { label: 'Show Main Window', click: () => mainWindow.show() },
         { type: 'separator' },
-        { label: 'About EA Nexus', click: () => this.showAbout() },
+        { label: 'About Nexus', click: () => this.showAbout() },
         { type: 'separator' },
         { label: 'Quit', click: () => app.quit() }
       ])
@@ -76,8 +76,8 @@ class TrayManager extends EventEmitter {
     const version = app.getVersion()
     dialog.showMessageBox({
       type: 'info',
-      title: 'About EA Nexus',
-      message: 'EA Nexus',
+      title: 'About Nexus',
+      message: 'Nexus',
       detail: `macOS Menu Bar Agent\nVersion ${version}`
     })
   }

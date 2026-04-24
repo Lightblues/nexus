@@ -85,7 +85,7 @@ export default function MainWindowLayout() {
         flexDirection: 'column'
       }}>
         <div style={{ marginBottom: '24px', padding: '0 4px' }}>
-          <h1 style={{ fontSize: '16px', fontWeight: 600, margin: 0 }}>EA Nexus</h1>
+          <h1 style={{ fontSize: '16px', fontWeight: 600, margin: 0 }}>Nexus</h1>
         </div>
         <nav style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
           <NavItem

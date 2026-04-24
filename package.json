@@ -1,12 +1,12 @@
 {
-  "name": "ea-nexus",
+  "name": "nexus",
   "version": "0.4.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/Lightblues/easons_agent.git",
     "directory": "packages/nexus"
   },
-  "description": "EA Nexus - macOS Menu Bar Agent",
+  "description": "Nexus - macOS Menu Bar Agent",
   "main": "./out/main/index.js",
   "author": "Eason",
   "license": "MIT",

@@ -1,7 +1,7 @@
 # Architecture
 
 ## Overview
-**EA Nexus** — macOS menu bar toolkit (Pomodoro timer, image uploader, time tracker).
+**Nexus** — macOS menu bar toolkit (Pomodoro timer, image uploader, time tracker).
 
 - **Platform**: macOS (Menu Bar interaction)
 - **Data/Config**: `~/.ea/nexus/`
