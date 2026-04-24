@@ -1,6 +1,5 @@
 appId: site.easonsi.nexus
 productName: Nexus
-afterPack: ./build/after-pack.cjs
 directories:
   buildResources: build
   output: dist
@@ -12,6 +11,12 @@ files:
   - '!{*.md}'
 mac:
   icon: build/icon.png
+  # Ad-hoc codesign (no Apple Developer ID). electron-builder delegates to
+  # @electron/osx-sign which signs nested frameworks/helpers inside-out —
+  # the order matters for Electron apps. Do NOT replace this with a custom
+  # `codesign --deep` afterPack hook; that breaks nested bundle signatures
+  # and causes "different Team IDs" dyld errors at launch.
+  identity: '-'
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
     - NSDocumentsFolderUsageDescription: Application needs to access Documents folder.
