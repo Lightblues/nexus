@@ -83,6 +83,16 @@ work).
 
 Subtitles are dynamic — e.g. `pomodoro.toggle` shows `running · 12:34 · click to pause`.
 
+## Layout gotcha: `100%` not `100vh`
+
+PaletteView **must** use `height: 100%`, not `height: 100vh`. The global
+`#root` selector applies `padding: 16px` (shared across all renderer views).
+`100vh` fills the entire BrowserWindow viewport *including* the padding area,
+so the bottom ~16 px of the component overflows and is clipped by the
+container's `overflow: hidden` + `borderRadius: 12px`. Using `100%` respects
+the parent's content box and keeps the footer fully visible regardless of how
+many commands are listed.
+
 ## Extending
 
 1. Create `features/<feature>/commands.ts`
