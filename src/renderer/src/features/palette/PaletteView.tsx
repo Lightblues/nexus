@@ -120,7 +120,7 @@ export default function PaletteView() {
   return (
     <div
       style={{
-        height: '100vh',
+        height: '100%',
         display: 'flex',
         flexDirection: 'column',
         background: 'var(--bg-primary)',

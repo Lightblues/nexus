@@ -60,7 +60,10 @@ export function registerPomodoroCommands(): void {
       title: 'Pomodoro: Start Focus',
       group: 'Pomodoro',
       keywords: ['focus', 'begin', 'work'],
-      when: () => pomodoroService.getStatus().state === 'idle',
+      when: () => {
+        const st = pomodoroService.getStatus().state
+        return st === 'idle' || st === 'finished'
+      },
       run: () => {
         pomodoroService.start()
         return { message: 'Focus started' }
@@ -116,7 +119,10 @@ export function registerPomodoroCommands(): void {
       title: 'Pomodoro: Exit (discard)',
       group: 'Pomodoro',
       keywords: ['cancel', 'discard', 'stop'],
-      when: () => pomodoroService.getStatus().state !== 'idle',
+      when: () => {
+        const st = pomodoroService.getStatus().state
+        return st !== 'idle' && st !== 'finished'
+      },
       dangerous: true,
       run: () => {
         pomodoroService.exit()

@@ -1,4 +1,4 @@
-import { BrowserWindow, screen } from 'electron'
+import { app, BrowserWindow, screen } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import { logger } from './Logger'
@@ -77,7 +77,11 @@ class PaletteWindow {
   }
 
   hide(): void {
-    if (this.window && this.window.isVisible()) this.window.hide()
+    if (this.window && this.window.isVisible()) {
+      this.window.hide()
+      // Return focus to the previously active app (macOS)
+      if (process.platform === 'darwin') app.hide()
+    }
   }
 
   getWindow(): BrowserWindow | null {

@@ -1,3 +1,4 @@
+import { app } from 'electron'
 import { commandRegistry } from '../../core'
 import { mainWindow } from '../../core'
 
@@ -46,6 +47,17 @@ export function registerWindowCommands(): void {
       keywords: ['settings', 'preferences', 'config'],
       run: () => {
         mainWindow.showWithRoute('/settings')
+      }
+    },
+
+    {
+      id: 'app.quit',
+      title: 'Quit Nexus',
+      group: 'App',
+      keywords: ['exit', 'quit', 'close', 'shutdown'],
+      dangerous: true,
+      run: () => {
+        app.quit()
       }
     }
   ])
