@@ -80,6 +80,7 @@ work).
 | `window.openStats` | always | Open main window at `/stats` |
 | `window.openTracker` | always | Open main window at `/tracker` |
 | `window.openSettings` | always | Open main window at `/settings` |
+| `app.quit` | always | Quit Nexus (dangerous) |
 
 Subtitles are dynamic — e.g. `pomodoro.toggle` shows `running · 12:34 · click to pause`.
 
