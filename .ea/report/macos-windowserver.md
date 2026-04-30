@@ -1,19 +1,45 @@
 # Nexus Tracker — macOS WindowServer 拖累问题诊断与修复方案
 
-> Date: 2026-04-30
+> Date: 2026-04-30(原始) / 2026-04-30 中午追加修正
 > Affected: `src/main/features/tracker/TrackerService.ts`
-> Severity: 🔴 High — 在 macOS 上长时间运行后会引发系统级拖放失效
+> Severity: 🟠 Medium-High — Nexus 是**触发器之一**,不是唯一根因。本文档记录的代码改动仍然必要。
+
+---
+
+## ⚠️ 重要更正(2026-04-30 12:30)
+
+本报告 04-29 当天写时认为"Nexus 是唯一根因",事后多轮验证证伪:
+
+- 04-29 晚关掉 Nexus 后症状消失 ✅
+- 04-30 早晨电脑唤醒(没启 Nexus)后症状再现 ❌ → 证伪"唯一根因"
+- 后续追查发现 **AltTab、macOS 26 的 LiveTranscriptionAgent + AXVisualSupportAgent** 等也是同等级 hammer
+- 真实模型见 `~/Projects/inbox/basic/mac/debug-log.md` 的"触发条件叠加模型"一节
+
+**简言之**:
+- Nexus 的 AppleScript 轮询确实是**强 hammer 之一**(每 5s 撞 universalaccessd)
+- 但单杀 Nexus 不足以解决问题(还有 AltTab 等其他 hammer)
+- **本报告里描述的代码问题和 P0 修复仍然 100% 必要**:即便不是唯一原因,Nexus 不应该是雪崩链条上的一环
+- 本报告原文档保持不变,作为"Nexus 这一环的解决方案"
+
+---
 
 ## 摘要
 
-Nexus 的 Auto-Tracker 通过 `osascript` 轮询当前活跃窗口与浏览器 URL。其 AppleScript 实现路径**底层会触发 macOS Accessibility 框架(`universalaccessd` + `AccessibilityUIServer`)的同步查询**,在以下条件叠加时会引发**整个系统的 WindowServer 事件投递管道阻塞**,表现为**全局拖放失效(松开鼠标 drop 不触发)、焦点切换迟钝、可能波及任意 GUI App**。
+Nexus 的 Auto-Tracker 通过 `osascript` 轮询当前活跃窗口与浏览器 URL。其 AppleScript 实现路径**底层会触发 macOS Accessibility 框架(`universalaccessd` + `AccessibilityUIServer`)的同步查询**,在以下条件叠加时会**显著加剧 WindowServer 事件投递管道的阻塞**,可能引发**全局拖放失效(松开鼠标 drop 不触发)、焦点切换迟钝、可能波及任意 GUI App**:
 
-复现条件:
+```
+Nexus tick × 浏览器主线程偶发慢 × 双外接显示器 × macOS 26.4.1 × 多个其他 AX hammer 同存
+  → universalaccessd datagram buffer (16384/cid) 撑爆
+  → WindowServer 丢拖放协调消息
+```
+
+复现条件(任一不满足都不一定可见,但全满足时几乎必现):
 1. Nexus tracker 启用(默认 5s 轮询)
 2. 前台 App 是浏览器(Chrome / Safari / Arc),且浏览器主线程偶尔较忙
 3. 持续运行 30 分钟到几小时
+4. 同时存在其他高频 AX 客户端(如 AltTab + 多 Electron App + 双屏)
 
-修复方向:**消除并发的 AppleScript 调用 + 缓存重复查询 + 收紧超时**,可以让 Nexus 在不破坏系统的前提下安全启用。
+修复方向:**消除并发的 AppleScript 调用 + 缓存重复查询 + 收紧超时 + 长期切到 native API**,把 Nexus 从"hammer"降级为"普通客户端"。这样即便整个系统其他 AX 压力高,Nexus 也不会成为压垮骆驼的最后一根。
 
 ---
 
