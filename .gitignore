@@ -2,6 +2,9 @@ out/
 dist/
 node_modules/
 
+# TypeScript incremental compile cache (per-developer, not portable)
+*.tsbuildinfo
+
 # Global gitignore excludes `build/` directories; re-include the files we
 # actually need in this project (electron-builder expects them here).
 !build/

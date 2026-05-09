@@ -35,6 +35,12 @@ Frameless, transparent, always-on-top (`screen-saver` level so it floats above
 full-screen apps), 640×420, centered horizontally and at ~22% from the top of
 the active display's work area (matches Raycast's visual position).
 
+On macOS the window is created with `type: 'panel'` so showing/focusing it
+does **not** call `[NSApp activate]` and therefore does not yank other Nexus
+windows (notably MainWindow) to the global foreground. The hotkey and the
+main window stay visually independent — same model as Spotlight / Raycast
+preferences. (See ADR-013.)
+
 Loaded via URL hash `#/palette` — the existing renderer handles it alongside
 `#/stats`, `#/settings`, `#/tracker` (ADR-006 routing rule preserved).
 
@@ -86,10 +92,10 @@ Subtitles are dynamic — e.g. `pomodoro.toggle` shows `running · 12:34 · clic
 
 ## Focus restoration on dismiss
 
-When the palette is hidden (Esc, hotkey toggle, blur, or command execution),
-`app.hide()` is called on macOS so the system returns focus to whichever
-application was active before the palette appeared. Without this, Nexus keeps
-invisible focus and the user cannot type into the previous window.
+Because the palette is an `NSPanel`-style window, opening it never activates
+the Nexus app — the previously active app keeps its activation throughout.
+On dismiss we simply `hide()` the window; we deliberately do **not** call
+`app.hide()` (which would also hide MainWindow if the user had it open).
 
 PaletteView **must** use `height: 100%`, not `height: 100vh`. The global
 `#root` selector applies `padding: 16px` (shared across all renderer views).

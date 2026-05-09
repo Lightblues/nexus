@@ -47,6 +47,9 @@ Modified:
 
 ## Unreleased — Command Palette
 
+### Fixes
+- **Palette no longer drags MainWindow to the foreground**: PaletteWindow is now created with `type: 'panel'` on macOS, so the global hotkey behaves like Spotlight/Raycast — opening the palette does not activate the Nexus app and does not bring other Nexus windows along. Removed the compensating `app.hide()` on dismiss (which had its own latent bug: it would hide MainWindow if the user had it open). (ADR-013)
+
 ### New
 - **Global command palette**: `Cmd+Shift+Space` opens a Raycast-style launcher. Fuzzy search, ↑/↓ + Enter keyboard nav, live subtitles showing pomodoro state. (ADR-009, ADR-010)
 - **URL scheme `nexus://`**: Other apps can trigger Nexus commands via `nexus://command/<id>?args=…`. Registered via `electron-builder.yml` → `protocols` and `app.setAsDefaultProtocolClient`.

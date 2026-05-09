@@ -1,4 +1,4 @@
-import { app, BrowserWindow, screen } from 'electron'
+import { BrowserWindow, screen } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import { logger } from './Logger'
@@ -16,6 +16,12 @@ class PaletteWindow {
       height: HEIGHT,
       show: false,
       frame: false,
+      // type: 'panel' lets the palette become the key window for keyboard
+      // input WITHOUT activating the Nexus app. Without this, show()/focus()
+      // call [NSApp activate], which yanks every other visible Nexus window
+      // (notably MainWindow) to the global foreground — exactly the bug
+      // Spotlight / Raycast avoid. Requires Electron ≥ v30 (PR electron#41750).
+      type: process.platform === 'darwin' ? 'panel' : undefined,
       resizable: false,
       movable: false,
       minimizable: false,
@@ -79,8 +85,9 @@ class PaletteWindow {
   hide(): void {
     if (this.window && this.window.isVisible()) {
       this.window.hide()
-      // Return focus to the previously active app (macOS)
-      if (process.platform === 'darwin') app.hide()
+      // No app.hide() here: the panel never activated Nexus in the first
+      // place, so the previously active app already has focus. Calling
+      // app.hide() would also hide MainWindow if the user had it open.
     }
   }
 

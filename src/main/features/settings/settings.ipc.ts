@@ -44,6 +44,9 @@ function validateConfig(content: string): ValidationResult {
     if (ui.windowHeight !== undefined && typeof ui.windowHeight !== 'number') {
       return { valid: false, error: 'ui.windowHeight must be a number' }
     }
+    if (ui.openAtLogin !== undefined && typeof ui.openAtLogin !== 'boolean') {
+      return { valid: false, error: 'ui.openAtLogin must be a boolean' }
+    }
   }
   return { valid: true }
 }

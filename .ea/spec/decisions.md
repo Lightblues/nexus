@@ -146,6 +146,22 @@
 
 ---
 
+## ADR-013: Palette as `type: 'panel'` (non-activating window)
+**Date**: 2026-04
+**Status**: Accepted
+
+**Context**: With the original PaletteWindow, opening the palette via the global hotkey while MainWindow was visible (e.g. behind another app on a different Space) would yank MainWindow to the global foreground alongside the palette. Root cause: on macOS, `BrowserWindow.show()` / `focus()` on a regular window calls `[NSApp activate]`, which brings every visible window of the app to the front. As a hack to mitigate the "Nexus stays invisibly active after dismiss" symptom, `app.hide()` was called on dismiss — which had its own latent bug (it would hide MainWindow if the user had it open). This violated the user expectation that the global hotkey and the app's configuration windows are isolated, the same way Raycast's palette and Raycast's preferences are independent.
+
+**Decision**: Create the palette window with `type: 'panel'` on macOS. Electron ≥ v30 (PR `electron#41750`) ensures `show()`/`focus()` on a panel window do **not** activate the parent app. The previous app keeps its activation; the palette becomes the key window only for keyboard input. The compensating `app.hide()` on dismiss is no longer needed (and is removed, fixing the latent MainWindow-disappears bug).
+
+**Rejected alternatives**:
+- **`showInactive()` + delayed focus**: still activates the app once any focus call is made, and breaks autofocus on the search input.
+- **`app.dock.hide()` / `setActivationPolicy('accessory')`** to make Nexus an agent app: bigger UX change (no Dock icon at all), affects every window, not just the palette.
+
+**Consequence**: Hotkey and main window are now visually independent. MainWindow stays in its prior Z-order/Space when the palette is summoned, and stays visible when the palette is dismissed. Requires Electron ≥ v30 (we ship 33.x, so this is satisfied today and pinned by the postinstall script).
+
+---
+
 ## ADR-012: Homebrew tap for distribution
 **Date**: 2026-04
 **Status**: Accepted
