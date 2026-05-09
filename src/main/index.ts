@@ -17,6 +17,14 @@ import { trackerService, registerTrackerIPC } from './features/tracker'
 import { uploaderService, registerUploaderIPC } from './features/uploader'
 import { registerPaletteIPC } from './features/palette'
 import { registerWindowCommands } from './features/window'
+import type { AppConfig } from '@shared/types'
+
+function applyLoginItemSettings(config: AppConfig): void {
+  app.setLoginItemSettings({
+    openAtLogin: config.ui.openAtLogin,
+    openAsHidden: true
+  })
+}
 
 // Prevent multiple instances (required so URL-scheme 'second-instance' event fires)
 const gotTheLock = app.requestSingleInstanceLock()
@@ -36,6 +44,7 @@ app.whenReady().then(() => {
     configManager.load()
     configManager.watch()
     dataManager.init()
+    applyLoginItemSettings(configManager.get())
 
     // Initialize UI
     trayManager.init()
@@ -61,6 +70,7 @@ app.whenReady().then(() => {
     configManager.on('config:updated', () => {
       trackerService.onConfigUpdate()
       globalHotkey.reload()
+      applyLoginItemSettings(configManager.get())
     })
 
     logger.info('Nexus started')

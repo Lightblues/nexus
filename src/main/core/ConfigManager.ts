@@ -22,7 +22,8 @@ const DEFAULT_CONFIG: AppConfig = {
   },
   ui: {
     windowWidth: 320,
-    windowHeight: 400
+    windowHeight: 400,
+    openAtLogin: true
   },
   tracker: {
     enabled: true,

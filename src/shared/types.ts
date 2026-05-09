@@ -114,6 +114,7 @@ export interface PomodoroConfig {
 export interface UIConfig {
   windowWidth: number
   windowHeight: number
+  openAtLogin: boolean
 }
 
 export interface TrackerConfig {

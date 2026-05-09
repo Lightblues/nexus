@@ -22,6 +22,7 @@ pomodoro:
 ui:
   windowWidth: 320
   windowHeight: 400
+  openAtLogin: true        # auto-start Nexus on macOS login
 
 tracker:
   enabled: true
