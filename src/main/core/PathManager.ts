@@ -30,6 +30,10 @@ class PathManager {
     return path.join(this._eaDir, 'archive')
   }
 
+  get windowStatePath(): string {
+    return path.join(this._eaDir, 'window-state.json')
+  }
+
   ensureDirectories(): void {
     fs.mkdirSync(this._eaDir, { recursive: true })
     fs.mkdirSync(this.logsDir, { recursive: true })
