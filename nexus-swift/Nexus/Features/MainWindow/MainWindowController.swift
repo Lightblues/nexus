@@ -5,6 +5,9 @@ import SwiftUI
 /// The window is built on first show; closing just hides (sets `isReleasedWhenClosed = false`).
 @MainActor
 final class MainWindowController: NSObject {
+    /// Pending route to apply on next show. Read by MainWindowView via env object.
+    let routeRequest = RouteRequest()
+
     private var window: NSWindow?
     private weak var environment: AppEnvironment?
 
@@ -24,6 +27,12 @@ final class MainWindowController: NSObject {
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    /// Show the window and switch to the requested route.
+    func show(route: MainRoute) {
+        routeRequest.requested = route
+        show()
+    }
+
     /// Called by NSWindowDelegate when the user closes the main window.
     func didClose() {
         // Drop back to accessory so we vanish from the Dock + ⌘Tab,
@@ -41,6 +50,8 @@ final class MainWindowController: NSObject {
             .environmentObject(env.pomodoroRepository)
             .environmentObject(env.trackerRepository)
             .environmentObject(env.tracker)
+            .environmentObject(routeRequest)
+            .environmentObject(routeRequest)
         let host = NSHostingController(rootView: root)
         let win = NSWindow(contentViewController: host)
         win.setContentSize(NSSize(width: 900, height: 600))
@@ -68,4 +79,12 @@ extension MainWindowController: NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         didClose()
     }
+}
+
+/// Lightweight observable used to push route changes from CommandRegistry into
+/// MainWindowView's selection. `requested` is consumed (set to nil) once the
+/// view applies it.
+@MainActor
+final class RouteRequest: ObservableObject {
+    @Published var requested: MainRoute?
 }

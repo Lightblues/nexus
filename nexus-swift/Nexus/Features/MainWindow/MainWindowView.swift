@@ -7,6 +7,7 @@ import SwiftUI
 /// which `NavigationSplitView` alone doesn't give a way back. Our toolbar button
 /// flips this state, and ⌃⌘S works as a keyboard shortcut.
 struct MainWindowView: View {
+    @EnvironmentObject var routeRequest: RouteRequest
     @State private var route: MainRoute = .stats
     @State private var sidebarVisibility: NavigationSplitViewVisibility = .all
 
@@ -37,6 +38,12 @@ struct MainWindowView: View {
         }
         .navigationTitle(route.label)
         .frame(minWidth: 700, minHeight: 400)
+        .onReceive(routeRequest.$requested) { req in
+            if let req {
+                route = req
+                routeRequest.requested = nil
+            }
+        }
     }
 
     @ViewBuilder

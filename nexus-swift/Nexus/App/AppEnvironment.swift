@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import Combine
 
 /// DI container — owns the singleton-style services used across the app.
 /// AppDelegate creates one instance, then passes it to view environments and the
@@ -14,12 +15,11 @@ final class AppEnvironment: ObservableObject {
     let tracker: TrackerService
     let notifier: NotificationService
     let mainWindow: MainWindowController
+    let palette: PaletteController
 
     init() {
         let config = ConfigService()
         let notifier = NotificationService.shared
-        // Open DB synchronously — it's tiny and we need it before anything else.
-        // If this throws, we crash early with a clear message rather than silently corrupt data.
         let database: Database
         do {
             try Paths.ensureDirectories()
@@ -37,6 +37,7 @@ final class AppEnvironment: ObservableObject {
         self.pomodoro = PomodoroService(repository: pomodoroRepository, config: config, notifier: notifier)
         self.tracker = TrackerService(repository: trackerRepository, config: config)
         self.mainWindow = MainWindowController()
+        self.palette = PaletteController()
     }
 
     /// Initial async work that needs `await` — called from AppDelegate.applicationDidFinishLaunching.
@@ -58,9 +59,39 @@ final class AppEnvironment: ObservableObject {
         await tracker.bootstrap()
 
         mainWindow.attach(environment: self)
+        palette.attach(environment: self)
+
+        // Register palette + URL-scheme commands. Order doesn't matter; each
+        // call is idempotent (registry replaces by id).
+        PomodoroCommands.register(service: pomodoro)
+        TrackerCommands.register(service: tracker, mainWindow: mainWindow)
+        WindowCommands.register(mainWindow: mainWindow)
+        AppCommands.register()
+
+        // URL scheme handler — listens for `nexus://command/<id>` from
+        // Shortcuts.app, terminal `open`, Raycast Quicklink, etc.
+        URLSchemeHandler.shared.install()
+
+        // Global hotkey for the palette. Re-bound below on config change.
+        installHotkey()
+        // Re-install on config.hotkey.palette change.
+        config.$config
+            .map(\.hotkey.palette)
+            .removeDuplicates()
+            .dropFirst()  // skip initial value (already installed above)
+            .sink { [weak self] _ in self?.installHotkey() }
+            .store(in: &cancellables)
 
         Log.app.info("Bootstrap complete")
     }
+
+    private func installHotkey() {
+        HotKey.shared.set(combo: config.config.hotkey.palette) { [weak self] in
+            self?.palette.toggle()
+        }
+    }
+
+    private var cancellables: Set<AnyCancellable> = []
 
     /// Final flush before terminate.
     func shutdown() async {
