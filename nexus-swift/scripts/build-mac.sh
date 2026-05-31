@@ -33,18 +33,20 @@ echo "==> Building Nexus v$VERSION"
 echo "==> xcodegen generate"
 (cd "$PROJECT_DIR" && xcodegen generate >/dev/null)
 
-# Clean previous build artifacts. Keep $DIST_DIR contents from earlier
-# versions so the user can compare; we just overwrite our specific filename.
-rm -rf "$BUILD_DIR/archive" "$BUILD_DIR/export"
-mkdir -p "$DIST_DIR" "$BUILD_DIR/archive" "$BUILD_DIR/export"
+# Downgrade objectVersion if XcodeGen emitted a "future" format. Newer Xcode
+# (e.g. macOS 26 Tahoe beta ships format 77) generates a project that older
+# Xcode on CI runners refuses with "future Xcode project file format".
+# Pinning to 56 keeps compatibility with Xcode 15.0+.
+PBXPROJ="$PROJECT_DIR/Nexus.xcodeproj/project.pbxproj"
+if [[ -f "$PBXPROJ" ]]; then
+  CURRENT=$(awk '/objectVersion = / {gsub(";",""); print $3; exit}' "$PBXPROJ")
+  if [[ -n "$CURRENT" && "$CURRENT" -gt 56 ]]; then
+    echo "==> Downgrading objectVersion $CURRENT → 56 for CI compat"
+    sed -i.bak 's/objectVersion = [0-9]*;/objectVersion = 56;/' "$PBXPROJ"
+    rm -f "$PBXPROJ.bak"
+  fi
+fi
 
-# Resolve packages (Xcode caches under DerivedData; this is just to fail fast
-# if SwiftPM has a network problem before the long archive step).
-echo "==> Resolving packages"
-xcodebuild \
-  -project "$PROJECT_DIR/Nexus.xcodeproj" \
-  -scheme Nexus \
-  -resolvePackageDependencies >/dev/null
 
 # Archive (Release, universal). Using `archive` instead of `build` so the
 # resulting .xcarchive is what xcodebuild -exportArchive expects.
