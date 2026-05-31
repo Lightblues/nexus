@@ -1,0 +1,21 @@
+# Xcode
+build/
+DerivedData/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+
+# XcodeGen — the project file is regenerated from project.yml
+Nexus.xcodeproj/
+
+# Swift Package Manager
+.swiftpm/
+Package.resolved
+
+# Build outputs
+*.app
+*.dSYM
+*.dSYM.zip
+*.dmg
+
+# macOS
+.DS_Store

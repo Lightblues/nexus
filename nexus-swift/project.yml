@@ -1,0 +1,66 @@
+name: Nexus
+options:
+  bundleIdPrefix: site.easonsi
+  deploymentTarget:
+    macOS: "13.0"
+  developmentLanguage: en
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+  defaultConfig: Debug
+configs:
+  Debug: debug
+  Release: release
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MACOSX_DEPLOYMENT_TARGET: "13.0"
+    ARCHS: "$(ARCHS_STANDARD)"
+    ONLY_ACTIVE_ARCH: NO
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "-"
+    DEVELOPMENT_TEAM: ""
+    ENABLE_HARDENED_RUNTIME: NO
+    SWIFT_TREAT_WARNINGS_AS_ERRORS: NO
+    GCC_TREAT_WARNINGS_AS_ERRORS: NO
+packages:
+  Yams:
+    url: https://github.com/jpsim/Yams
+    from: 5.1.3
+targets:
+  Nexus:
+    type: application
+    platform: macOS
+    sources:
+      - path: Nexus
+        excludes:
+          - "**/.DS_Store"
+    resources:
+      - path: Nexus/Resources/Assets.xcassets
+      - path: Nexus/Resources/default-config.yaml
+    dependencies:
+      - package: Yams
+    info:
+      path: Nexus/Resources/Info.plist
+      properties:
+        CFBundleName: Nexus
+        CFBundleDisplayName: Nexus
+        CFBundleShortVersionString: "1.0.0"
+        CFBundleVersion: "1"
+        CFBundleIdentifier: site.easonsi.nexus
+        CFBundlePackageType: APPL
+        LSUIElement: true
+        LSMinimumSystemVersion: "13.0"
+        NSHumanReadableCopyright: "© 2026 Eason"
+        NSAccessibilityUsageDescription: "Nexus reads the active window title to track time spent per app and per project. Required for the Time Tracker feature."
+        NSAppleEventsUsageDescription: "Nexus reads the URL of the active browser tab to enrich tracker records. Required only for browser apps you whitelist in config."
+        NSAppleScriptEnabled: false
+        CFBundleURLTypes:
+          - CFBundleURLName: site.easonsi.nexus
+            CFBundleURLSchemes: [nexus]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: site.easonsi.nexus
+        PRODUCT_NAME: Nexus
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        COMBINE_HIDPI_IMAGES: YES
+        ENABLE_PREVIEWS: YES
