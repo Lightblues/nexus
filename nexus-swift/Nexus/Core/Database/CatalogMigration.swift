@@ -32,22 +32,28 @@ enum CatalogMigration {
                let pomo = json["pomodoro"] as? [String: Any]
             {
                 if let projects = pomo["projects"] as? [[String: Any]] {
-                    try await db.write { db in
+                    let count = try await db.write { db -> Int in
+                        var n = 0
                         for p in projects {
                             guard let name = p["name"] as? String, !name.isEmpty else { continue }
                             let color = (p["color"] as? String) ?? "#3B82F6"
                             try PomodoroRepository.upsertProject(db: db, name: name, color: color)
-                            importedProjects += 1
+                            n += 1
                         }
+                        return n
                     }
+                    importedProjects += count
                 }
                 if let tags = pomo["tags"] as? [String] {
-                    try await db.write { db in
+                    let count = try await db.write { db -> Int in
+                        var n = 0
                         for t in tags where !t.isEmpty {
                             try PomodoroRepository.upsertTag(db: db, name: t)
-                            importedTags += 1
+                            n += 1
                         }
+                        return n
                     }
+                    importedTags += count
                 }
             }
 

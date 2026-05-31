@@ -22,6 +22,18 @@ settings:
     ENABLE_HARDENED_RUNTIME: NO
     SWIFT_TREAT_WARNINGS_AS_ERRORS: NO
     GCC_TREAT_WARNINGS_AS_ERRORS: NO
+    # Swift 6 strict concurrency. Xcode 15 (CI) treats some captures as
+    # errors that Xcode 16+ only warns about. We're targeting Swift 5 mode
+    # but the compiler still applies the strictness level set here.
+    # `minimal` matches the pre-Swift-6 behavior and unblocks CI builds;
+    # tightening to `targeted` or `complete` is a future refactor.
+    SWIFT_STRICT_CONCURRENCY: "minimal"
+    # Swift 6 strict concurrency. Xcode 15 (CI) treats some captures as
+    # errors that Xcode 16+ only warns about. We're targeting Swift 5 mode
+    # but the compiler still applies the strictness level set here.
+    # `minimal` matches the pre-Swift-6 behavior and unblocks CI builds;
+    # tightening to `targeted` or `complete` is a future refactor.
+    SWIFT_STRICT_CONCURRENCY: "minimal"
 packages:
   GRDB:
     url: https://github.com/groue/GRDB.swift

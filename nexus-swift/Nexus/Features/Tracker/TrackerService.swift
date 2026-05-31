@@ -72,12 +72,13 @@ final class TrackerService: ObservableObject {
     private func schedulePermissionRecheck() {
         permissionCheckTimer?.invalidate()
         let timer = Timer(timeInterval: 2.0, repeats: true) { [weak self] _ in
+            let weakSelf = self
             Task { @MainActor in
-                guard let self else { return }
+                guard let s = weakSelf else { return }
                 if Permissions.isAccessibilityTrusted {
-                    self.permissionCheckTimer?.invalidate()
-                    self.permissionCheckTimer = nil
-                    self.applyConfig(self.config.config.tracker)
+                    s.permissionCheckTimer?.invalidate()
+                    s.permissionCheckTimer = nil
+                    s.applyConfig(s.config.config.tracker)
                 }
             }
         }
@@ -90,7 +91,8 @@ final class TrackerService: ObservableObject {
     private func startPolling(interval: Int) {
         stopPolling()
         let pollTimer = Timer(timeInterval: TimeInterval(interval), repeats: true) { [weak self] _ in
-            Task { @MainActor in await self?.tick() }
+            let weakSelf = self
+            Task { @MainActor in await weakSelf?.tick() }
         }
         RunLoop.main.add(pollTimer, forMode: .common)
         self.pollTimer = pollTimer

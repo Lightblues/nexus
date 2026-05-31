@@ -122,7 +122,10 @@ final class PomodoroService: ObservableObject {
         stopTickTimer()
         tick()  // initial paint
         let timer = Timer(timeInterval: 1.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.tick() }
+            // Capture weak self into a sendable local before the Task hop —
+            // older Swift compilers reject the implicit capture in the closure.
+            let weakSelf = self
+            Task { @MainActor in weakSelf?.tick() }
         }
         RunLoop.main.add(timer, forMode: .common)
         tickTimer = timer

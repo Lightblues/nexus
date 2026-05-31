@@ -68,13 +68,17 @@ final class TrackerRepository: ObservableObject {
         last.endTime = endTime
         last.duration = endTime.timeIntervalSince(last.startTime)
         lastRecord = last
+        // Capture into immutable locals so the @Sendable db.write closure
+        // doesn't reference the (mutable) `last` var via implicit self.
+        let newDuration = Int(last.duration)
+        let endTs = Int(endTime.timeIntervalSince1970)
         do {
             try await db.write { db in
                 try db.execute(sql: """
                     UPDATE tracker_records SET end_time = ?, duration = ? WHERE id = ?
                     """, arguments: [
-                        Int(endTime.timeIntervalSince1970),
-                        Int(last.duration),
+                        endTs,
+                        newDuration,
                         id
                     ])
             }
