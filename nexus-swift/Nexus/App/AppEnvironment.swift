@@ -32,8 +32,8 @@ final class AppEnvironment: ObservableObject {
         notifier.setup()
         await pomodoroStore.load()
         await pomodoroStore.runArchiveSweep()
-        // Refresh draft metadata in case archive sweep / load changed lastSession.
-        pomodoro.objectWillChange.send()
+        // Now that the store is loaded, push lastSession metadata into the service.
+        pomodoro.hydrateFromStore()
         Log.app.info("Bootstrap complete")
     }
 

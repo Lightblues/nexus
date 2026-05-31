@@ -12,7 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var statusItem: NSStatusItem?
     private var popover: NSPopover?
-    private var popoverMonitor: Any?
+    private var clickOutsideMonitor: Any?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Run bootstrap and don't block UI.
@@ -110,11 +110,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func togglePopover() {
         guard let pop = popover, let button = statusItem?.button else { return }
         if pop.isShown {
-            pop.performClose(nil)
+            closePopover()
         } else {
             pop.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-            // Activate so the SwiftUI views can take focus for typing in editor sheet.
+            // Activate so SwiftUI text fields in the editor sheet can take key focus.
             NSApp.activate(ignoringOtherApps: true)
+            installClickOutsideMonitor()
+        }
+    }
+
+    private func closePopover() {
+        popover?.performClose(nil)
+        removeClickOutsideMonitor()
+    }
+
+    /// `NSPopover.behavior = .transient` should auto-dismiss on outside clicks, but
+    /// it's unreliable when we call `NSApp.activate` ourselves (it skips the
+    /// dismiss path for clicks that land on other apps). A global event monitor
+    /// catches clicks anywhere outside the app reliably.
+    private func installClickOutsideMonitor() {
+        removeClickOutsideMonitor()
+        clickOutsideMonitor = NSEvent.addGlobalMonitorForEvents(
+            matching: [.leftMouseDown, .rightMouseDown]
+        ) { [weak self] _ in
+            // Global monitor only fires for events outside our app, so any hit here
+            // means the user clicked away → close.
+            Task { @MainActor in self?.closePopover() }
+        }
+    }
+
+    private func removeClickOutsideMonitor() {
+        if let monitor = clickOutsideMonitor {
+            NSEvent.removeMonitor(monitor)
+            clickOutsideMonitor = nil
         }
     }
 }

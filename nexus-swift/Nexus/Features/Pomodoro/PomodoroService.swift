@@ -24,14 +24,18 @@ final class PomodoroService: ObservableObject {
         self.store = store
         self.config = config
         self.notifier = notifier
-        Task { @MainActor in
-            self.draftMetadata = store.data.meta.lastSession
-            self.sessionsSinceLongBreak = store.data.meta.sessionsSinceLongBreak
-        }
     }
 
     func attach(statusItem: NSStatusItem) {
         self.statusItem = statusItem
+    }
+
+    /// Pull the last session metadata + counter from the freshly-loaded store.
+    /// Must be called AFTER `PomodoroStore.load()` completes — otherwise we read
+    /// the default empty PomodoroData and the user's last project/tags appear lost.
+    func hydrateFromStore() {
+        draftMetadata = store.data.meta.lastSession
+        sessionsSinceLongBreak = store.data.meta.sessionsSinceLongBreak
     }
 
     // MARK: - Public actions
