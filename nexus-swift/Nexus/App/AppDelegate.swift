@@ -71,6 +71,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func showContextMenu() {
         let menu = NSMenu()
+        let mainItem = NSMenuItem(title: "Show Main Window", action: #selector(showMainWindow), keyEquivalent: "")
+        menu.addItem(mainItem)
+        menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "About Nexus", action: #selector(about), keyEquivalent: ""))
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q"))
@@ -84,6 +87,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func about() {
         NSApp.orderFrontStandardAboutPanel(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    @objc private func showMainWindow() {
+        environment.mainWindow.show()
     }
 
     @objc private func quit() {

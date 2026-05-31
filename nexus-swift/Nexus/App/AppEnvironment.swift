@@ -9,16 +9,23 @@ final class AppEnvironment: ObservableObject {
     let config: ConfigService
     let pomodoroStore: PomodoroStore
     let pomodoro: PomodoroService
+    let trackerStore: TrackerStore
+    let tracker: TrackerService
     let notifier: NotificationService
+    let mainWindow: MainWindowController
 
     init() {
         let config = ConfigService()
         let pomodoroStore = PomodoroStore()
+        let trackerStore = TrackerStore()
         let notifier = NotificationService.shared
         self.config = config
         self.pomodoroStore = pomodoroStore
+        self.trackerStore = trackerStore
         self.notifier = notifier
         self.pomodoro = PomodoroService(store: pomodoroStore, config: config, notifier: notifier)
+        self.tracker = TrackerService(store: trackerStore, config: config)
+        self.mainWindow = MainWindowController()
     }
 
     /// Initial async work that needs `await` — called from AppDelegate.applicationDidFinishLaunching.
@@ -32,14 +39,19 @@ final class AppEnvironment: ObservableObject {
         notifier.setup()
         await pomodoroStore.load()
         await pomodoroStore.runArchiveSweep()
-        // Now that the store is loaded, push lastSession metadata into the service.
         pomodoro.hydrateFromStore()
+
+        await tracker.bootstrap()
+
+        mainWindow.attach(environment: self)
+
         Log.app.info("Bootstrap complete")
     }
 
     /// Final flush before terminate.
     func shutdown() async {
         await pomodoroStore.flushNow()
+        await tracker.shutdown()
         Log.app.info("Shutdown flushed")
     }
 }
