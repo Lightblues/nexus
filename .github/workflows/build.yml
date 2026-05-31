@@ -1,10 +1,10 @@
-name: Build Nexus
+name: Build Nexus (Swift)
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag (e.g., 0.1.0)'
+        description: 'Version tag (e.g., 1.0.0)'
         required: false
         default: ''
   push:
@@ -13,56 +13,46 @@ on:
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: macos-14   # Apple Silicon runner — fastest archive + universal output
+    defaults:
+      run:
+        working-directory: nexus-swift
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
 
-      - name: Setup Python for node-gyp
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
+      - name: Resolve version
+        id: version
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/nexus-v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/nexus-v}"
+          elif [[ -n "${{ github.event.inputs.version }}" ]]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION=$(awk -F'"' '/CFBundleShortVersionString/ {print $2; exit}' project.yml)
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Building v$VERSION"
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build app
-        run: pnpm build
-
-      - name: Build macOS DMG (arm64)
-        run: npx electron-builder --mac --arm64 --publish never
+      - name: Build DMG
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.VERSION }}
+        run: ./scripts/build-mac.sh
 
-      - name: Build macOS DMG (x64)
-        run: npx electron-builder --mac --x64 --publish never
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload arm64 artifact
+      - name: Upload DMG artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Nexus-arm64
-          path: dist/*-arm64*.dmg
+          name: Nexus-dmg
+          path: nexus-swift/dist/Nexus-*.dmg
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 30
 
-      - name: Upload x64 artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: Nexus-x64
-          path: dist/*-x64*.dmg
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: List dist contents
+      - name: Show dist contents
         run: ls -la dist/
 
   release:
@@ -97,12 +87,10 @@ jobs:
       - name: Compute DMG sha256
         id: hash
         run: |
-          VERSION="${{ steps.version.outputs.VERSION }}"
-          ARM_DMG=$(find artifacts -name "*-arm64*.dmg" | head -1)
-          INTEL_DMG=$(find artifacts -name "*-x64*.dmg" | head -1)
-
-          echo "ARM_SHA=$(sha256sum "$ARM_DMG"   | awk '{print $1}')" >> $GITHUB_OUTPUT
-          echo "INTEL_SHA=$(sha256sum "$INTEL_DMG" | awk '{print $1}')" >> $GITHUB_OUTPUT
+          DMG=$(find artifacts -name "Nexus-*.dmg" | head -1)
+          [[ -f "$DMG" ]] || { echo "No DMG found"; exit 1; }
+          echo "SHA=$(sha256sum "$DMG" | awk '{print $1}')" >> $GITHUB_OUTPUT
+          echo "DMG=$DMG" >> $GITHUB_OUTPUT
 
       - name: Checkout homebrew-tap
         uses: actions/checkout@v4
@@ -112,22 +100,21 @@ jobs:
           path: tap
 
       - name: Update cask file
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
+          SHA: ${{ steps.hash.outputs.SHA }}
         run: |
-          VERSION="${{ steps.version.outputs.VERSION }}"
-          ARM_SHA="${{ steps.hash.outputs.ARM_SHA }}"
-          INTEL_SHA="${{ steps.hash.outputs.INTEL_SHA }}"
           CASK=tap/Casks/nexus.rb
-
           python3 - <<PY
-          import re, pathlib
-          p = pathlib.Path("${CASK}")
+          import re, pathlib, os
+          p = pathlib.Path("$CASK")
           s = p.read_text()
-          s = re.sub(r'version "[^"]+"',           f'version "${VERSION}"', s, count=1)
-          s = re.sub(r'arm:\s*"[0-9a-f]{64}"',     f'arm:   "${ARM_SHA}"', s, count=1)
-          s = re.sub(r'intel:\s*"[0-9a-f]{64}"',   f'intel: "${INTEL_SHA}"', s, count=1)
+          s = re.sub(r'version "[^"]+"', f'version "{os.environ["VERSION"]}"', s, count=1)
+          # Single sha256 (universal binary). The cask file uses
+          # `sha256 "..."` after the version → match exactly that.
+          s = re.sub(r'sha256 "[0-9a-f]{64}"', f'sha256 "{os.environ["SHA"]}"', s, count=1)
           p.write_text(s)
           PY
-
           cat "$CASK"
 
       - name: Push cask update
