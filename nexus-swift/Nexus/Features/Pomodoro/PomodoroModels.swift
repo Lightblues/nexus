@@ -31,12 +31,6 @@ struct PomodoroMeta: Codable, Equatable {
     var sessionsSinceLongBreak: Int = 0
 }
 
-struct PomodoroData: Codable, Equatable {
-    var sessions: [SessionRecord] = []
-    var meta: PomodoroMeta = .init()
-    var schemaVersion: Int = 1
-}
-
 /// View-state-friendly enum the popover binds to.
 enum PomodoroState: Equatable {
     case idle

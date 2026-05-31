@@ -1,9 +1,8 @@
 import Foundation
-import Yams
 
-/// YAML-backed config service with hot-reload via DispatchSourceFileSystemObject.
-/// Mirrors Electron `ConfigManager.ts`. Reads from ~/.ea/nexus/config.yaml; on
-/// missing file, copies the bundled default-config.yaml to that location.
+/// JSON-backed config service with hot-reload via DispatchSourceFileSystemObject.
+/// Reads from ~/.ea/nexus/config.json; on missing file, copies the bundled
+/// default-config.json. Provides save() for the Settings GUI.
 @MainActor
 final class ConfigService: ObservableObject {
     @Published private(set) var config: AppConfig = AppConfig()
@@ -11,6 +10,9 @@ final class ConfigService: ObservableObject {
     private var fileSource: DispatchSourceFileSystemObject?
     private var fileDescriptor: Int32 = -1
     private var debounceWorkItem: DispatchWorkItem?
+    /// Set true while we're writing the file ourselves, so the file watcher
+    /// doesn't immediately trigger a reload that races with our write.
+    private var suppressNextReload = false
 
     init() {}
 
@@ -23,30 +25,61 @@ final class ConfigService: ObservableObject {
 
     func reloadNow() { load() }
 
+    /// Persist a new config value and write to disk atomically.
+    /// Triggers the next file-watcher event but suppresses its reload to avoid
+    /// re-decoding what we just encoded.
+    func save(_ newValue: AppConfig) {
+        guard newValue != config else { return }
+        config = newValue
+        do {
+            let data = try Self.encoder.encode(newValue)
+            suppressNextReload = true
+            let url = Paths.configFile
+            let tmp = url.appendingPathExtension("tmp")
+            try data.write(to: tmp, options: .atomic)
+            _ = try FileManager.default.replaceItemAt(url, withItemAt: tmp)
+            Log.config.info("Config saved")
+        } catch {
+            Log.config.error("Config save failed: \(error)")
+            suppressNextReload = false
+        }
+    }
+
     // MARK: - Internals
+
+    private static let decoder: JSONDecoder = {
+        let d = JSONDecoder()
+        return d
+    }()
+
+    private static let encoder: JSONEncoder = {
+        let e = JSONEncoder()
+        e.outputFormatting = [.prettyPrinted, .sortedKeys]
+        return e
+    }()
 
     private func ensureConfigFileExists() {
         let fm = FileManager.default
         let url = Paths.configFile
         if fm.fileExists(atPath: url.path) { return }
-        guard let bundled = Bundle.main.url(forResource: "default-config", withExtension: "yaml") else {
-            Log.config.warn("default-config.yaml not found in bundle; writing minimal defaults")
-            try? "".write(to: url, atomically: true, encoding: .utf8)
+        guard let bundled = Bundle.main.url(forResource: "default-config", withExtension: "json") else {
+            Log.config.warn("default-config.json not found in bundle; writing minimal defaults")
+            try? Self.encoder.encode(AppConfig()).write(to: url)
             return
         }
         do {
             try fm.copyItem(at: bundled, to: url)
-            Log.config.info("Seeded config.yaml from bundled defaults")
+            Log.config.info("Seeded config.json from bundled defaults")
         } catch {
-            Log.config.error("Failed seeding config.yaml: \(error)")
+            Log.config.error("Failed seeding config.json: \(error)")
         }
     }
 
     private func load() {
         let url = Paths.configFile
         do {
-            let text = try String(contentsOf: url, encoding: .utf8)
-            let loaded = try YAMLDecoder().decode(AppConfig.self, from: text)
+            let data = try Data(contentsOf: url)
+            let loaded = try Self.decoder.decode(AppConfig.self, from: data)
             self.config = loaded
             Log.config.info("Config loaded")
         } catch {
@@ -76,6 +109,10 @@ final class ConfigService: ObservableObject {
     }
 
     private func scheduleReload() {
+        if suppressNextReload {
+            suppressNextReload = false
+            return
+        }
         debounceWorkItem?.cancel()
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }

@@ -2,12 +2,22 @@ import SwiftUI
 import Charts
 
 struct TrackerView: View {
-    @EnvironmentObject var store: TrackerStore
+    @EnvironmentObject var repo: TrackerRepository
     @EnvironmentObject var service: TrackerService
 
     @State private var selectedDate: Date = Date()
-    @State private var data: DailyTrackerData = DailyTrackerData(date: TrackerStore.todayString())
-    @State private var isLoading = false
+    @State private var records: [WindowActivityRecord] = []
+    @State private var summary: [String: TimeInterval] = [:]
+    @State private var totalSeconds: TimeInterval = 0
+
+    private static let dateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.calendar = Calendar(identifier: .gregorian)
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = .current
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -19,19 +29,24 @@ struct TrackerView: View {
                     timelineSection
                     Divider()
                     HStack(alignment: .top, spacing: 24) {
-                        AppUsageDonut(summary: data.meta.appSummary)
+                        AppUsageDonut(summary: summary)
                             .frame(width: 280, height: 280)
-                        AppRankList(records: data.records, summary: data.meta.appSummary)
+                        AppRankList(records: records, summary: summary)
                             .frame(maxWidth: .infinity)
                     }
                 }
                 .padding(20)
             }
         }
-        .task(id: TrackerStore.dateString(selectedDate)) { await loadSelectedDay() }
-        .onReceive(store.$today) { freshToday in
-            // If user is viewing today, update live as new records flush.
-            if isViewingToday { data = freshToday }
+        .task(id: dateKey(selectedDate)) { await loadSelectedDay() }
+        .onReceive(repo.$todayRecords) { fresh in
+            if isViewingToday { records = fresh }
+        }
+        .onReceive(repo.$todaySummary) { fresh in
+            if isViewingToday {
+                summary = fresh
+                totalSeconds = fresh.values.reduce(0, +)
+            }
         }
     }
 
@@ -44,7 +59,7 @@ struct TrackerView: View {
                 .datePickerStyle(.compact)
             Spacer()
             statusPill
-            Text(formatTotal(data.meta.totalActiveTime))
+            Text(formatTotal(totalSeconds))
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.secondary)
         }
@@ -68,8 +83,6 @@ struct TrackerView: View {
         .background(.quinary, in: Capsule())
     }
 
-    // MARK: - Status banner
-
     @ViewBuilder
     private var statusBanner: some View {
         if service.status == .waitingForPermission {
@@ -91,14 +104,12 @@ struct TrackerView: View {
         }
     }
 
-    // MARK: - Timeline + sections
-
     private var timelineSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Timeline")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.secondary)
-            TrackerTimeline(records: data.records, day: selectedDate)
+            TrackerTimeline(records: records, day: selectedDate)
                 .frame(height: 60)
         }
     }
@@ -106,18 +117,15 @@ struct TrackerView: View {
     // MARK: - Data load
 
     private var isViewingToday: Bool {
-        TrackerStore.dateString(selectedDate) == TrackerStore.todayString()
+        dateKey(selectedDate) == dateKey(Date())
     }
 
+    private func dateKey(_ d: Date) -> String { Self.dateFormatter.string(from: d) }
+
     private func loadSelectedDay() async {
-        isLoading = true
-        defer { isLoading = false }
-        let key = TrackerStore.dateString(selectedDate)
-        if let loaded = await store.dailyData(for: key) {
-            data = loaded
-        } else {
-            data = DailyTrackerData(date: key)
-        }
+        records = await repo.records(on: selectedDate)
+        summary = await repo.appSummary(on: selectedDate)
+        totalSeconds = await repo.totalActiveTime(on: selectedDate)
     }
 
     private func formatTotal(_ seconds: TimeInterval) -> String {

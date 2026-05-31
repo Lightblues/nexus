@@ -105,7 +105,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pop.animates = true
         let root = PomodoroPopoverView()
             .environmentObject(environment.pomodoro)
-            .environmentObject(environment.pomodoroStore)
+            .environmentObject(environment.pomodoroRepository)
             .environmentObject(environment.config)
         let host = NSHostingController(rootView: root)
         host.view.frame = NSRect(x: 0, y: 0, width: 320, height: 400)

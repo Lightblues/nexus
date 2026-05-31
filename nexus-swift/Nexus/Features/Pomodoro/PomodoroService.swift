@@ -10,7 +10,7 @@ final class PomodoroService: ObservableObject {
     @Published private(set) var remaining: TimeInterval = 0
     @Published var draftMetadata: SessionMetadata = .empty   // persisted on next start
 
-    private let store: PomodoroStore
+    private let repository: PomodoroRepository
     private let config: ConfigService
     private let notifier: NotificationService
     private weak var statusItem: NSStatusItem?
@@ -18,10 +18,9 @@ final class PomodoroService: ObservableObject {
     private var tickTimer: Timer?
     private var autoBreakTask: Task<Void, Never>?
     private var sessionsSinceLongBreak: Int = 0
-    private var cancellables: Set<AnyCancellable> = []
 
-    init(store: PomodoroStore, config: ConfigService, notifier: NotificationService) {
-        self.store = store
+    init(repository: PomodoroRepository, config: ConfigService, notifier: NotificationService) {
+        self.repository = repository
         self.config = config
         self.notifier = notifier
     }
@@ -30,12 +29,15 @@ final class PomodoroService: ObservableObject {
         self.statusItem = statusItem
     }
 
-    /// Pull the last session metadata + counter from the freshly-loaded store.
-    /// Must be called AFTER `PomodoroStore.load()` completes — otherwise we read
-    /// the default empty PomodoroData and the user's last project/tags appear lost.
-    func hydrateFromStore() {
-        draftMetadata = store.data.meta.lastSession
-        sessionsSinceLongBreak = store.data.meta.sessionsSinceLongBreak
+    /// Pull last session metadata + counter from the repository (after refresh).
+    /// Falls back to UserDefaults-persisted draft if no historical sessions yet.
+    func hydrate() {
+        if let persisted = PomodoroRepository.loadPersistedDraft() {
+            draftMetadata = persisted
+        } else {
+            draftMetadata = repository.lastSession
+        }
+        sessionsSinceLongBreak = repository.sessionsSinceLongBreak
     }
 
     // MARK: - Public actions
@@ -102,7 +104,7 @@ final class PomodoroService: ObservableObject {
 
     func updateDraftMetadata(_ meta: SessionMetadata) async {
         draftMetadata = meta
-        await store.updateMeta { $0.lastSession = meta }
+        await repository.updateLastSessionMetadata(meta)
     }
 
     // MARK: - Internals
@@ -147,7 +149,6 @@ final class PomodoroService: ObservableObject {
         let endedAt = startedAt.addingTimeInterval(total)
         await persistSession(kind: kind, startedAt: startedAt, endedAt: endedAt, completedFully: true)
 
-        // Notification
         let title = kind == .work ? "Focus complete" : "Break complete"
         let body  = kind == .work ? "Time for a break." : "Back to work?"
         notifier.notify(title: title, body: body)
@@ -206,10 +207,9 @@ final class PomodoroService: ObservableObject {
             task: draftMetadata.task,
             completedFully: completedFully
         )
-        await store.append(record)
+        await repository.insert(record)
         if kind == .work {
             sessionsSinceLongBreak = (sessionsSinceLongBreak + 1) % max(1, config.config.pomodoro.sessionsBeforeLongBreak)
-            await store.updateMeta { $0.sessionsSinceLongBreak = self.sessionsSinceLongBreak }
         }
     }
 

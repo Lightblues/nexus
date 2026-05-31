@@ -1,0 +1,49 @@
+{
+  "pomodoro": {
+    "workDuration": 25,
+    "shortBreakDuration": 5,
+    "longBreakDuration": 15,
+    "sessionsBeforeLongBreak": 4,
+    "projects": [
+      { "name": "default", "color": "#3B82F6" }
+    ],
+    "tags": ["work", "study", "personal"],
+    "showPopoverOnComplete": false,
+    "autoStartBreak": true,
+    "autoStartBreakDelay": 3,
+    "confettiOnComplete": true
+  },
+  "ui": {
+    "windowWidth": 320,
+    "windowHeight": 400,
+    "openAtLogin": true
+  },
+  "tracker": {
+    "enabled": true,
+    "pollInterval": 5,
+    "idleThreshold": 120,
+    "recordTitle": false,
+    "enrichApps": ["Code", "Google Chrome"]
+  },
+  "hotkey": {
+    "palette": "CommandOrControl+Shift+Space"
+  },
+  "uploader": {
+    "enabled": true,
+    "github": {
+      "token": "",
+      "owner": "",
+      "repo": "",
+      "branch": "main"
+    },
+    "cdn": {
+      "baseUrl": "https://cdn.jsdelivr.net/gh"
+    },
+    "compress": {
+      "quality": 80,
+      "defaultFormat": "auto"
+    },
+    "defaultPath": "upload",
+    "cacheThumbnails": true
+  }
+}

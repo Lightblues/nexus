@@ -1,20 +1,5 @@
 import Foundation
 
-/// Per-day on-disk shape. Matches the Electron `DailyTrackerData` schema (version: 1).
-/// Files live at ~/.ea/nexus/tracker/YYYY-MM-DD.json.
-struct DailyTrackerData: Codable, Equatable {
-    let date: String           // "YYYY-MM-DD"
-    var version: Int = 1
-    var records: [WindowActivityRecord] = []
-    var meta: TrackerDayMeta = .init()
-}
-
-struct TrackerDayMeta: Codable, Equatable {
-    var totalActiveTime: TimeInterval = 0     // seconds, sum of all records
-    /// app name → seconds. Built from `records` on flush.
-    var appSummary: [String: TimeInterval] = [:]
-}
-
 /// Optional context attached to a window observation. Some fields only populated for
 /// apps in the enrichment whitelist.
 struct ActivityContext: Codable, Equatable {

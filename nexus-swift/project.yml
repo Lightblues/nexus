@@ -23,9 +23,9 @@ settings:
     SWIFT_TREAT_WARNINGS_AS_ERRORS: NO
     GCC_TREAT_WARNINGS_AS_ERRORS: NO
 packages:
-  Yams:
-    url: https://github.com/jpsim/Yams
-    from: 5.1.3
+  GRDB:
+    url: https://github.com/groue/GRDB.swift
+    from: 6.29.0
 targets:
   Nexus:
     type: application
@@ -36,9 +36,10 @@ targets:
           - "**/.DS_Store"
     resources:
       - path: Nexus/Resources/Assets.xcassets
-      - path: Nexus/Resources/default-config.yaml
+      - path: Nexus/Resources/default-config.json
     dependencies:
-      - package: Yams
+      - package: GRDB
+        product: GRDB
     info:
       path: Nexus/Resources/Info.plist
       properties:

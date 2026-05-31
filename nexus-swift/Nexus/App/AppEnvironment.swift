@@ -7,40 +7,50 @@ import AppKit
 @MainActor
 final class AppEnvironment: ObservableObject {
     let config: ConfigService
-    let pomodoroStore: PomodoroStore
+    let database: Database
+    let pomodoroRepository: PomodoroRepository
     let pomodoro: PomodoroService
-    let trackerStore: TrackerStore
+    let trackerRepository: TrackerRepository
     let tracker: TrackerService
     let notifier: NotificationService
     let mainWindow: MainWindowController
 
     init() {
         let config = ConfigService()
-        let pomodoroStore = PomodoroStore()
-        let trackerStore = TrackerStore()
         let notifier = NotificationService.shared
+        // Open DB synchronously — it's tiny and we need it before anything else.
+        // If this throws, we crash early with a clear message rather than silently corrupt data.
+        let database: Database
+        do {
+            try Paths.ensureDirectories()
+            database = try Database(url: Paths.dbFile)
+        } catch {
+            fatalError("Failed to open ~/.ea/nexus/nexus.db: \(error)")
+        }
+        let pomodoroRepository = PomodoroRepository(database: database)
+        let trackerRepository = TrackerRepository(database: database)
         self.config = config
-        self.pomodoroStore = pomodoroStore
-        self.trackerStore = trackerStore
+        self.database = database
         self.notifier = notifier
-        self.pomodoro = PomodoroService(store: pomodoroStore, config: config, notifier: notifier)
-        self.tracker = TrackerService(store: trackerStore, config: config)
+        self.pomodoroRepository = pomodoroRepository
+        self.trackerRepository = trackerRepository
+        self.pomodoro = PomodoroService(repository: pomodoroRepository, config: config, notifier: notifier)
+        self.tracker = TrackerService(repository: trackerRepository, config: config)
         self.mainWindow = MainWindowController()
     }
 
     /// Initial async work that needs `await` — called from AppDelegate.applicationDidFinishLaunching.
     func bootstrap() async {
-        do {
-            try Paths.ensureDirectories()
-        } catch {
-            Log.app.error("Failed creating ~/.ea/nexus/ subdirs: \(error)")
-        }
         config.bootstrap()
         notifier.setup()
-        await pomodoroStore.load()
-        await pomodoroStore.runArchiveSweep()
-        pomodoro.hydrateFromStore()
 
+        // One-shot import of legacy JSON files. Idempotent.
+        _ = await LegacyMigration.runIfNeeded(db: database)
+
+        await pomodoroRepository.refresh()
+        pomodoro.hydrate()
+
+        await trackerRepository.bootstrap()
         await tracker.bootstrap()
 
         mainWindow.attach(environment: self)
@@ -50,8 +60,8 @@ final class AppEnvironment: ObservableObject {
 
     /// Final flush before terminate.
     func shutdown() async {
-        await pomodoroStore.flushNow()
+        // SQLite WAL is already durable on each commit; nothing to flush.
         await tracker.shutdown()
-        Log.app.info("Shutdown flushed")
+        Log.app.info("Shutdown complete")
     }
 }

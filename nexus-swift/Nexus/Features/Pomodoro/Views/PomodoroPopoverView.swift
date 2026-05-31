@@ -2,7 +2,7 @@ import SwiftUI
 
 struct PomodoroPopoverView: View {
     @EnvironmentObject var pomodoro: PomodoroService
-    @EnvironmentObject var store: PomodoroStore
+    @EnvironmentObject var repo: PomodoroRepository
     @EnvironmentObject var config: ConfigService
 
     @State private var showEditor = false
@@ -137,11 +137,8 @@ struct PomodoroPopoverView: View {
 
     // MARK: - Derived state
 
-    private var todaySessions: [SessionRecord] {
-        store.sessions(on: Date()).filter { $0.kind == .work }
-    }
-    private var todayCount: Int { todaySessions.count }
-    private var todayDuration: TimeInterval { todaySessions.map(\.duration).reduce(0, +) }
+    private var todayCount: Int { repo.todayCount }
+    private var todayDuration: TimeInterval { repo.todayDuration }
 
     private var progress: Double {
         switch pomodoro.state {

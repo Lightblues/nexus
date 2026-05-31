@@ -7,7 +7,9 @@ enum Paths {
         return home.appendingPathComponent(".ea/nexus", isDirectory: true)
     }
 
-    static var configFile: URL    { root.appendingPathComponent("config.yaml") }
+    static var configFile: URL    { root.appendingPathComponent("config.json") }
+    static var configFileLegacyYAML: URL { root.appendingPathComponent("config.yaml") }
+    static var dbFile: URL        { root.appendingPathComponent("nexus.db") }
     static var dataFile: URL      { root.appendingPathComponent("data.json") }
     static var uploaderFile: URL  { root.appendingPathComponent("uploader.json") }
 
