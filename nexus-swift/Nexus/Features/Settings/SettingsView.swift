@@ -64,26 +64,42 @@ struct SettingsView: View {
     // MARK: - Tab bar
 
     private var tabBar: some View {
-        HStack(spacing: 0) {
+        // Pill-style segmented tabs. The highlight is a RoundedRectangle inside
+        // each button's bounds (not a full-width background) so it never bleeds
+        // into the surrounding chrome. `.contentShape(Rectangle())` makes the
+        // entire pill area click-targetable, not just the painted text+icon.
+        HStack(spacing: 4) {
             ForEach(Tab.allCases) { t in
-                Button {
-                    tab = t
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: t.systemImage)
-                        Text(t.title)
-                    }
-                    .font(.system(size: 12, weight: tab == t ? .semibold : .regular))
-                    .foregroundStyle(tab == t ? Color.accentColor : .primary)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .frame(maxWidth: .infinity)
-                    .background(tab == t ? Color.accentColor.opacity(0.10) : .clear)
-                }
-                .buttonStyle(.plain)
+                tabButton(t)
             }
         }
-        .background(.ultraThinMaterial)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(Color(NSColor.controlBackgroundColor).opacity(0.4))
+    }
+
+    private func tabButton(_ t: Tab) -> some View {
+        let selected = (tab == t)
+        return Button {
+            tab = t
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: t.systemImage)
+                    .font(.system(size: 11, weight: .medium))
+                Text(t.title)
+                    .font(.system(size: 12, weight: selected ? .semibold : .regular))
+            }
+            .foregroundStyle(selected ? Color.accentColor : .primary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(selected ? Color.accentColor.opacity(0.15) : Color.clear)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Save bar
