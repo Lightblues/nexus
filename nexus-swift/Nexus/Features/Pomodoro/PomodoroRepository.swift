@@ -13,6 +13,9 @@ final class PomodoroRepository: ObservableObject {
     /// Today's work-session count + total duration. Refreshed on insert.
     @Published private(set) var todayCount: Int = 0
     @Published private(set) var todayDuration: TimeInterval = 0
+    /// Live projection of the project + tag catalogs. Bound by Settings + popover UI.
+    @Published private(set) var projects: [ProjectConfig] = []
+    @Published private(set) var tagCatalog: [String] = []
 
     private let db: Database
 
@@ -20,26 +23,33 @@ final class PomodoroRepository: ObservableObject {
         self.db = database
     }
 
-    /// Load derived projections (last session, today's count). Call from bootstrap.
+    /// Load derived projections (last session, today's count, catalogs). Call from bootstrap.
     func refresh() async {
         struct Snapshot: Sendable {
             let last: SessionRecord?
             let sessionsSinceLongBreak: Int
             let count: Int
             let duration: TimeInterval
+            let projects: [ProjectConfig]
+            let tags: [String]
         }
         do {
             let snap: Snapshot = try await db.read { db in
                 let last = try Self.fetchLastSession(db)
                 let sessionsSinceLongBreak = Self.computeSessionsSinceLongBreak(db: db) ?? 0
                 let (count, duration) = try Self.todaySummary(db: db)
+                let projects = try Self.fetchProjects(db: db)
+                let tags = try Self.fetchTags(db: db)
                 return Snapshot(last: last, sessionsSinceLongBreak: sessionsSinceLongBreak,
-                                count: count, duration: duration)
+                                count: count, duration: duration,
+                                projects: projects, tags: tags)
             }
             self.lastSession = snap.last?.metadata ?? .empty
             self.sessionsSinceLongBreak = snap.sessionsSinceLongBreak
             self.todayCount = snap.count
             self.todayDuration = snap.duration
+            self.projects = snap.projects
+            self.tagCatalog = snap.tags
         } catch {
             Log.pomodoro.error("Repository refresh failed: \(error)")
         }
@@ -51,6 +61,14 @@ final class PomodoroRepository: ObservableObject {
         do {
             try await db.write { db in
                 try Self.insertRow(db: db, record: record)
+                // Auto-register the project + tags so they show up in the
+                // catalog even if user hasn't gone through Settings.
+                if let p = record.project, !p.isEmpty {
+                    try Self.upsertProject(db: db, name: p, color: nil)
+                }
+                for tag in record.tags {
+                    try Self.upsertTag(db: db, name: tag)
+                }
             }
             await refresh()
         } catch {
@@ -183,6 +201,97 @@ final class PomodoroRepository: ObservableObject {
         }
     }
 
+    /// Database-wide summary — total sessions, total focused seconds, span.
+    /// Used by Stats page header. Single SQL query.
+    struct DBSummary: Sendable, Equatable {
+        let totalWorkSessions: Int
+        let totalFocusSeconds: TimeInterval
+        let firstSession: Date?
+        let lastSession: Date?
+    }
+
+    func dbSummary() async -> DBSummary {
+        do {
+            return try await db.read { db in
+                let row = try Row.fetchOne(db, sql: """
+                    SELECT COUNT(*) AS n,
+                           COALESCE(SUM(duration), 0) AS sec,
+                           MIN(start_time) AS first_ts,
+                           MAX(start_time) AS last_ts
+                      FROM pomodoro_sessions
+                     WHERE kind = 'work'
+                    """)
+                let n: Int = row?["n"] ?? 0
+                let sec: Int = row?["sec"] ?? 0
+                let firstTs: Int? = row?["first_ts"]
+                let lastTs: Int? = row?["last_ts"]
+                return DBSummary(
+                    totalWorkSessions: n,
+                    totalFocusSeconds: TimeInterval(sec),
+                    firstSession: firstTs.map { Date(timeIntervalSince1970: TimeInterval($0)) },
+                    lastSession: lastTs.map { Date(timeIntervalSince1970: TimeInterval($0)) }
+                )
+            }
+        } catch {
+            return DBSummary(totalWorkSessions: 0, totalFocusSeconds: 0,
+                             firstSession: nil, lastSession: nil)
+        }
+    }
+
+    // MARK: - Project + tag CRUD
+
+    func addProject(name: String, color: String) async {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        do {
+            try await db.write { db in
+                try Self.upsertProject(db: db, name: trimmed, color: color)
+            }
+            await refresh()
+        } catch { Log.pomodoro.error("addProject failed: \(error)") }
+    }
+
+    func updateProjectColor(name: String, color: String) async {
+        do {
+            try await db.write { db in
+                try db.execute(sql: "UPDATE pomodoro_projects SET color = ? WHERE name = ?",
+                               arguments: [color, name])
+            }
+            await refresh()
+        } catch { Log.pomodoro.error("updateProjectColor failed: \(error)") }
+    }
+
+    func deleteProject(name: String) async {
+        do {
+            try await db.write { db in
+                try db.execute(sql: "DELETE FROM pomodoro_projects WHERE name = ?",
+                               arguments: [name])
+            }
+            await refresh()
+        } catch { Log.pomodoro.error("deleteProject failed: \(error)") }
+    }
+
+    func addTag(_ name: String) async {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        do {
+            try await db.write { db in
+                try Self.upsertTag(db: db, name: trimmed)
+            }
+            await refresh()
+        } catch { Log.pomodoro.error("addTag failed: \(error)") }
+    }
+
+    func deleteTag(_ name: String) async {
+        do {
+            try await db.write { db in
+                try db.execute(sql: "DELETE FROM pomodoro_tag_catalog WHERE name = ?",
+                               arguments: [name])
+            }
+            await refresh()
+        } catch { Log.pomodoro.error("deleteTag failed: \(error)") }
+    }
+
     // MARK: - Statics (used by Migration too)
 
     nonisolated static func insertRow(db: GRDB.Database, record: SessionRecord) throws {
@@ -206,6 +315,62 @@ final class PomodoroRepository: ObservableObject {
             try db.execute(sql: "INSERT INTO pomodoro_session_tags(session_id, tag) VALUES(?, ?)",
                            arguments: [record.id.uuidString, tag])
         }
+    }
+
+    /// Insert a project if absent, otherwise leave the existing color alone (unless one is provided).
+    nonisolated static func upsertProject(db: GRDB.Database, name: String, color: String?) throws {
+        let now = Int(Date().timeIntervalSince1970)
+        if let color {
+            try db.execute(sql: """
+                INSERT INTO pomodoro_projects(name, color, created_at)
+                VALUES(?, ?, ?)
+                ON CONFLICT(name) DO UPDATE SET color = excluded.color
+                """, arguments: [name, color, now])
+        } else {
+            // Auto-add path: pick a stable default color from name hash.
+            let defaultColor = autoColor(for: name)
+            try db.execute(sql: """
+                INSERT INTO pomodoro_projects(name, color, created_at)
+                VALUES(?, ?, ?)
+                ON CONFLICT(name) DO NOTHING
+                """, arguments: [name, defaultColor, now])
+        }
+    }
+
+    nonisolated static func upsertTag(db: GRDB.Database, name: String) throws {
+        let now = Int(Date().timeIntervalSince1970)
+        try db.execute(sql: """
+            INSERT INTO pomodoro_tag_catalog(name, created_at)
+            VALUES(?, ?)
+            ON CONFLICT(name) DO NOTHING
+            """, arguments: [name, now])
+    }
+
+    /// Stable color from name — same hash function as TrackerColors so a project
+    /// named "VSCode" gets the same hue across the app.
+    private nonisolated static func autoColor(for name: String) -> String {
+        let palette = ["#3B82F6", "#10B981", "#F59E0B", "#EF4444",
+                       "#8B5CF6", "#EC4899", "#14B8A6", "#6366F1",
+                       "#06B6D4", "#F97316", "#84CC16", "#A855F7"]
+        var hash: UInt64 = 0xcbf29ce484222325
+        for byte in name.utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 0x100000001b3
+        }
+        return palette[Int(hash % UInt64(palette.count))]
+    }
+
+    nonisolated static func fetchProjects(db: GRDB.Database) throws -> [ProjectConfig] {
+        let rows = try Row.fetchAll(db, sql: """
+            SELECT name, color FROM pomodoro_projects ORDER BY created_at, name
+            """)
+        return rows.map { ProjectConfig(name: $0["name"], color: $0["color"]) }
+    }
+
+    nonisolated static func fetchTags(db: GRDB.Database) throws -> [String] {
+        try String.fetchAll(db, sql: """
+            SELECT name FROM pomodoro_tag_catalog ORDER BY created_at, name
+            """)
     }
 
     nonisolated private static func fetchLastSession(_ db: GRDB.Database) throws -> SessionRecord? {

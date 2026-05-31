@@ -7,10 +7,12 @@ struct StatsView: View {
     @EnvironmentObject var repo: PomodoroRepository
 
     @State private var selectedDate: Date = Date()
+    @State private var dbSummary: PomodoroRepository.DBSummary?
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
+                summaryCard
                 calendarCard
                 HStack(alignment: .top, spacing: 16) {
                     weeklyCard.frame(maxWidth: .infinity)
@@ -21,13 +23,50 @@ struct StatsView: View {
             }
             .padding(20)
         }
+        .task { dbSummary = await repo.dbSummary() }
+    }
+
+    // MARK: - DB summary
+
+    private var summaryCard: some View {
+        StatsCard(title: "Database") {
+            HStack(spacing: 28) {
+                summaryStat(value: "\(dbSummary?.totalWorkSessions ?? 0)",
+                            label: "total sessions")
+                summaryStat(value: formatHours((dbSummary?.totalFocusSeconds ?? 0) / 3600),
+                            label: "total focus time")
+                summaryStat(value: spanLabel, label: "history span")
+                Spacer()
+            }
+        }
+    }
+
+    private var spanLabel: String {
+        guard let first = dbSummary?.firstSession else { return "—" }
+        let days = Int(Date().timeIntervalSince(first) / 86400)
+        if days < 1 { return "today" }
+        if days < 7 { return "\(days) day\(days == 1 ? "" : "s")" }
+        if days < 30 { return "\(days / 7)w \(days % 7)d" }
+        let months = days / 30
+        return "\(months) month\(months == 1 ? "" : "s")"
+    }
+
+    private func summaryStat(value: String, label: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(value)
+                .font(.system(size: 22, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+            Text(label)
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+        }
     }
 
     // MARK: - Activity calendar
 
     private var calendarCard: some View {
         StatsCard(title: "Activity") {
-            ActivityCalendar(weeks: 53)
+            ActivityCalendar(maxWeeks: 53)
                 .padding(.vertical, 4)
         }
     }

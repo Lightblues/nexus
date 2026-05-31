@@ -3,15 +3,17 @@ import SwiftUI
 /// GitHub-style heatmap of work-session counts. Reads from PomodoroRepository
 /// via SQL aggregation — does not load full session rows.
 ///
-/// Each column = one ISO week, each row = one weekday (Mon top, Sun bottom).
-/// 5-bucket color scale: 0, 1, 2-3, 4-5, 6+.
+/// The visible week range adapts to the data: minimum 12 weeks, maximum
+/// `maxWeeks` (default 53). When the user has very little data, we still
+/// show some context — but we don't pad to a year of empty cells.
 struct ActivityCalendar: View {
     @EnvironmentObject var repo: PomodoroRepository
 
-    /// Number of weeks to render. 53 covers a full year.
-    var weeks: Int = 53
+    /// Upper bound on weeks to render. Lower bound is fixed at 12 inside.
+    var maxWeeks: Int = 53
 
     @State private var counts: [String: Int] = [:]
+    @State private var weeks: Int = 12      // resolved at load() time
     @State private var hovered: (date: Date, count: Int)?
     @State private var hoverPoint: CGPoint = .zero
 
@@ -207,7 +209,21 @@ struct ActivityCalendar: View {
     private func load() async {
         let cal = Calendar(identifier: .gregorian)
         let to = cal.date(byAdding: .day, value: 1, to: Date())!
-        let from = cal.date(byAdding: .weekOfYear, value: -weeks, to: to)!
+
+        // Resolve the actual span: at least 12 weeks, at most maxWeeks, but
+        // long enough to cover the user's earliest session.
+        let summary = await repo.dbSummary()
+        let resolvedWeeks: Int
+        if let first = summary.firstSession {
+            let span = cal.dateComponents([.weekOfYear], from: first, to: to)
+            let needed = max((span.weekOfYear ?? 0) + 1, 12)
+            resolvedWeeks = min(maxWeeks, needed)
+        } else {
+            resolvedWeeks = 12
+        }
+        weeks = resolvedWeeks
+
+        let from = cal.date(byAdding: .weekOfYear, value: -resolvedWeeks, to: to)!
         counts = await repo.dailyCounts(from: from, to: to)
     }
 }

@@ -31,8 +31,6 @@ struct PomodoroConfig: Codable, Equatable {
     var shortBreakDuration: Int = 5
     var longBreakDuration: Int = 15
     var sessionsBeforeLongBreak: Int = 4
-    var projects: [ProjectConfig] = [.init(name: "default", color: "#3B82F6")]
-    var tags: [String] = ["work", "study", "personal"]
     var showPopoverOnComplete: Bool = false
     var autoStartBreak: Bool = true
     var autoStartBreakDelay: Int = 3               // seconds
@@ -45,13 +43,24 @@ struct PomodoroConfig: Codable, Equatable {
         shortBreakDuration = (try? c.decode(Int.self, forKey: .shortBreakDuration)) ?? 5
         longBreakDuration = (try? c.decode(Int.self, forKey: .longBreakDuration)) ?? 15
         sessionsBeforeLongBreak = (try? c.decode(Int.self, forKey: .sessionsBeforeLongBreak)) ?? 4
-        projects = (try? c.decode([ProjectConfig].self, forKey: .projects)) ?? [.init(name: "default", color: "#3B82F6")]
-        tags = (try? c.decode([String].self, forKey: .tags)) ?? ["work", "study", "personal"]
         showPopoverOnComplete = (try? c.decode(Bool.self, forKey: .showPopoverOnComplete)) ?? false
         autoStartBreak = (try? c.decode(Bool.self, forKey: .autoStartBreak)) ?? true
         autoStartBreakDelay = (try? c.decode(Int.self, forKey: .autoStartBreakDelay)) ?? 3
         confettiOnComplete = (try? c.decode(Bool.self, forKey: .confettiOnComplete)) ?? true
     }
+}
+
+/// Legacy projects + tags shape — kept only for one-shot migration into the DB
+/// at first launch. New code reads/writes through `PomodoroRepository.projects`
+/// + `.tagCatalog`.
+struct LegacyPomodoroCatalog: Codable {
+    var projects: [LegacyProjectConfig]?
+    var tags: [String]?
+}
+
+struct LegacyProjectConfig: Codable {
+    var name: String
+    var color: String
 }
 
 struct ProjectConfig: Codable, Equatable, Identifiable {

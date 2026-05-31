@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct UploaderSettingsForm: View {
-    @EnvironmentObject var config: ConfigService
+    @Binding var draft: AppConfig
     @State private var revealToken = false
 
     var body: some View {
@@ -16,27 +16,27 @@ struct UploaderSettingsForm: View {
 
     private var githubSection: some View {
         SettingsSection(title: "GitHub Repository") {
-            Toggle("Enable image uploader", isOn: bind(\.uploader.enabled))
+            Toggle("Enable image uploader", isOn: $draft.uploader.enabled)
             FieldRow(label: "Owner") {
-                TextField("lightblues", text: bind(\.uploader.github.owner))
+                TextField("lightblues", text: $draft.uploader.github.owner)
                     .textFieldStyle(.roundedBorder)
             }
             FieldRow(label: "Repo") {
-                TextField("assets", text: bind(\.uploader.github.repo))
+                TextField("assets", text: $draft.uploader.github.repo)
                     .textFieldStyle(.roundedBorder)
             }
             FieldRow(label: "Branch") {
-                TextField("main", text: bind(\.uploader.github.branch))
+                TextField("main", text: $draft.uploader.github.branch)
                     .textFieldStyle(.roundedBorder)
             }
             FieldRow(label: "Token") {
                 HStack(spacing: 6) {
                     if revealToken {
-                        TextField("ghp_…", text: bind(\.uploader.github.token))
+                        TextField("ghp_…", text: $draft.uploader.github.token)
                             .textFieldStyle(.roundedBorder)
                             .font(.system(size: 11, design: .monospaced))
                     } else {
-                        SecureField("ghp_…", text: bind(\.uploader.github.token))
+                        SecureField("ghp_…", text: $draft.uploader.github.token)
                             .textFieldStyle(.roundedBorder)
                             .font(.system(size: 11, design: .monospaced))
                     }
@@ -59,7 +59,7 @@ struct UploaderSettingsForm: View {
     private var cdnSection: some View {
         SettingsSection(title: "CDN") {
             FieldRow(label: "Base URL") {
-                TextField("https://cdn.jsdelivr.net/gh", text: bind(\.uploader.cdn.baseUrl))
+                TextField("https://cdn.jsdelivr.net/gh", text: $draft.uploader.cdn.baseUrl)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(size: 11, design: .monospaced))
             }
@@ -75,13 +75,13 @@ struct UploaderSettingsForm: View {
                 HStack {
                     Slider(value: qualityBinding, in: 30...100, step: 1)
                         .frame(width: 200)
-                    Text("\(config.config.uploader.compress.quality)")
+                    Text("\(draft.uploader.compress.quality)")
                         .monospacedDigit()
                         .frame(width: 36, alignment: .leading)
                 }
             }
             FieldRow(label: "Default format") {
-                Picker("", selection: bind(\.uploader.compress.defaultFormat)) {
+                Picker("", selection: $draft.uploader.compress.defaultFormat) {
                     Text("Auto").tag("auto")
                     Text("JPEG").tag("jpeg")
                     Text("WebP").tag("webp")
@@ -96,34 +96,19 @@ struct UploaderSettingsForm: View {
 
     private var qualityBinding: Binding<Double> {
         Binding(
-            get: { Double(config.config.uploader.compress.quality) },
-            set: { newValue in
-                var draft = config.config
-                draft.uploader.compress.quality = Int(newValue)
-                config.save(draft)
-            }
+            get: { Double(draft.uploader.compress.quality) },
+            set: { draft.uploader.compress.quality = Int($0) }
         )
     }
 
     private var pathsSection: some View {
         SettingsSection(title: "Paths") {
             FieldRow(label: "Default path") {
-                TextField("upload", text: bind(\.uploader.defaultPath))
+                TextField("upload", text: $draft.uploader.defaultPath)
                     .textFieldStyle(.roundedBorder)
             }
             Toggle("Cache thumbnails for upload history",
-                   isOn: bind(\.uploader.cacheThumbnails))
+                   isOn: $draft.uploader.cacheThumbnails)
         }
-    }
-
-    private func bind<T>(_ keyPath: WritableKeyPath<AppConfig, T>) -> Binding<T> {
-        Binding(
-            get: { config.config[keyPath: keyPath] },
-            set: { newValue in
-                var draft = config.config
-                draft[keyPath: keyPath] = newValue
-                config.save(draft)
-            }
-        )
     }
 }

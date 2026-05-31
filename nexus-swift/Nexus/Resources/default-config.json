@@ -4,10 +4,6 @@
     "shortBreakDuration": 5,
     "longBreakDuration": 15,
     "sessionsBeforeLongBreak": 4,
-    "projects": [
-      { "name": "default", "color": "#3B82F6" }
-    ],
-    "tags": ["work", "study", "personal"],
     "showPopoverOnComplete": false,
     "autoStartBreak": true,
     "autoStartBreakDelay": 3,

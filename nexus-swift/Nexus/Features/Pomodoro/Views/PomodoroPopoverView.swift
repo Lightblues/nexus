@@ -30,7 +30,7 @@ struct PomodoroPopoverView: View {
             } onCancel: {
                 showEditor = false
             }
-            .environmentObject(config)
+            .environmentObject(repo)
         }
     }
 

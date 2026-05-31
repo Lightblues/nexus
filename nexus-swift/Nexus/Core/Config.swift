@@ -28,6 +28,8 @@ final class ConfigService: ObservableObject {
     /// Persist a new config value and write to disk atomically.
     /// Triggers the next file-watcher event but suppresses its reload to avoid
     /// re-decoding what we just encoded.
+    /// On mackup symlinks, follows the link so the real backed-up file gets
+    /// updated (replaceItemAt would replace the link itself).
     func save(_ newValue: AppConfig) {
         guard newValue != config else { return }
         config = newValue
@@ -35,9 +37,9 @@ final class ConfigService: ObservableObject {
             let data = try Self.encoder.encode(newValue)
             suppressNextReload = true
             let url = Paths.configFile
-            let tmp = url.appendingPathExtension("tmp")
-            try data.write(to: tmp, options: .atomic)
-            _ = try FileManager.default.replaceItemAt(url, withItemAt: tmp)
+            let target = (try? URL(fileURLWithPath: FileManager.default
+                .destinationOfSymbolicLink(atPath: url.path))) ?? url
+            try data.write(to: target, options: .atomic)
             Log.config.info("Config saved")
         } catch {
             Log.config.error("Config save failed: \(error)")

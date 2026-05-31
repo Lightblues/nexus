@@ -54,6 +54,7 @@ For tracking regressions across phases, the numbers we've measured so far:
 | Swift Debug + debugger | Phase 2 | 60 MB | 3.9 MB | Tracker added; lldb attached |
 | Swift Release | Phase 2 | 19 MB | 2.6 MB | what users will see |
 | Swift Release | Phase 3.0 | 18.6 MB | 2.6 MB | + GRDB + 32k tracker rows in SQLite |
-| **Swift Release** | **Phase 3** | **17.8 MB** | **2.6 MB** | + Stats + Settings (no Yams) |
+| Swift Release | Phase 3 | 17.8 MB | 2.6 MB | + Stats + Settings (no Yams) |
+| **Swift Release** | **Phase 3.1** | **18.5 MB** | **2.6 MB** | + projects/tags in DB + draft-save Settings |
 
 Run on the same machine (Apple Silicon M-series) to keep numbers comparable.

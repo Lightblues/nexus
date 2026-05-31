@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Shared editor for both idle and running/paused states (ADR-007).
 struct EditSessionModal: View {
-    @EnvironmentObject var config: ConfigService
+    @EnvironmentObject var repo: PomodoroRepository
     @State private var working: SessionMetadata
     @State private var newProjectMode = false
     @State private var newProjectName = ""
@@ -46,12 +46,12 @@ struct EditSessionModal: View {
                 } else {
                     HStack {
                         Picker("", selection: $working.project) {
-                            ForEach(config.config.pomodoro.projects) { p in
+                            ForEach(repo.projects) { p in
                                 Text(p.name).tag(Optional(p.name))
                             }
-                            // Allow keeping a custom project not in config:
+                            // Allow keeping a custom project not in catalog:
                             if let cur = working.project,
-                               !config.config.pomodoro.projects.contains(where: { $0.name == cur }) {
+                               !repo.projects.contains(where: { $0.name == cur }) {
                                 Text(cur).tag(Optional(cur))
                             }
                         }
@@ -111,7 +111,7 @@ struct EditSessionModal: View {
     }
 
     private var allTagOptions: [String] {
-        let configured = config.config.pomodoro.tags
+        let configured = repo.tagCatalog
         let extras = working.tags.filter { !configured.contains($0) }
         return configured + extras
     }

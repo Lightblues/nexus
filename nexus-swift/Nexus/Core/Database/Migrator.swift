@@ -53,6 +53,24 @@ enum Migrator {
             try db.create(indexOn: "tracker_records", columns: ["app", "start_time"])
         }
 
+        m.registerMigration("v2_projects_tags_catalog") { db in
+            // Projects: name + display color. Project name is the natural key —
+            // session.project is a free-form string today, this catalog tracks
+            // which names exist + their assigned colors.
+            try db.create(table: "pomodoro_projects") { t in
+                t.primaryKey("name", .text).notNull()
+                t.column("color", .text).notNull()
+                t.column("created_at", .integer).notNull()
+            }
+            // Tag catalog: just the set of tag names ever used. Letting users
+            // explicitly add/remove tags here is what `pomodoro_session_tags`
+            // can't do (you'd have to retag a session to register a new tag).
+            try db.create(table: "pomodoro_tag_catalog") { t in
+                t.primaryKey("name", .text).notNull()
+                t.column("created_at", .integer).notNull()
+            }
+        }
+
         return m
     }
 }

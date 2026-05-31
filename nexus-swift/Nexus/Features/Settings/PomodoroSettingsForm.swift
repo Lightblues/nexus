@@ -1,16 +1,15 @@
 import SwiftUI
 
 /// Pomodoro section: durations, auto-break, projects, tags.
-/// Two-way bound to ConfigService — every change writes config.json.
+/// Edits a draft AppConfig binding owned by SettingsView. No disk writes here.
 struct PomodoroSettingsForm: View {
-    @EnvironmentObject var config: ConfigService
+    @Binding var draft: AppConfig
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
             timingSection
             behaviorSection
-            projectsSection
-            tagsSection
+            projectsAndTagsNote
         }
         .frame(maxWidth: 540, alignment: .leading)
     }
@@ -20,21 +19,16 @@ struct PomodoroSettingsForm: View {
     private var timingSection: some View {
         SettingsSection(title: "Session Lengths") {
             FieldRow(label: "Work duration") {
-                MinutesStepper(value: bind(\.pomodoro.workDuration), range: 1...180)
+                NumberStepper(value: $draft.pomodoro.workDuration, range: 1...180, suffix: "min", width: 64)
             }
             FieldRow(label: "Short break") {
-                MinutesStepper(value: bind(\.pomodoro.shortBreakDuration), range: 1...60)
+                NumberStepper(value: $draft.pomodoro.shortBreakDuration, range: 1...60, suffix: "min", width: 64)
             }
             FieldRow(label: "Long break") {
-                MinutesStepper(value: bind(\.pomodoro.longBreakDuration), range: 1...120)
+                NumberStepper(value: $draft.pomodoro.longBreakDuration, range: 1...120, suffix: "min", width: 64)
             }
             FieldRow(label: "Sessions before long break") {
-                Stepper(value: bind(\.pomodoro.sessionsBeforeLongBreak), in: 1...12) {
-                    Text("\(config.config.pomodoro.sessionsBeforeLongBreak)")
-                        .monospacedDigit()
-                        .frame(width: 24, alignment: .leading)
-                }
-                .labelsHidden()
+                NumberStepper(value: $draft.pomodoro.sessionsBeforeLongBreak, range: 1...12, suffix: "", width: 32)
             }
         }
     }
@@ -43,157 +37,37 @@ struct PomodoroSettingsForm: View {
 
     private var behaviorSection: some View {
         SettingsSection(title: "Behavior") {
-            Toggle("Auto-start break after focus completes", isOn: bind(\.pomodoro.autoStartBreak))
-            if config.config.pomodoro.autoStartBreak {
+            Toggle("Auto-start break after focus completes", isOn: $draft.pomodoro.autoStartBreak)
+            if draft.pomodoro.autoStartBreak {
                 FieldRow(label: "Auto-start delay") {
-                    Stepper(value: bind(\.pomodoro.autoStartBreakDelay), in: 0...30) {
-                        Text("\(config.config.pomodoro.autoStartBreakDelay) sec")
-                            .monospacedDigit()
-                    }
-                    .labelsHidden()
+                    NumberStepper(value: $draft.pomodoro.autoStartBreakDelay,
+                                  range: 0...30, suffix: "sec", width: 56)
                 }
                 .padding(.leading, 22)
             }
-            Toggle("Show popover when focus completes", isOn: bind(\.pomodoro.showPopoverOnComplete))
+            Toggle("Show popover when focus completes", isOn: $draft.pomodoro.showPopoverOnComplete)
             Toggle("Trigger Raycast confetti on focus complete",
-                   isOn: bind(\.pomodoro.confettiOnComplete))
+                   isOn: $draft.pomodoro.confettiOnComplete)
         }
     }
 
-    // MARK: - Projects
+    // MARK: - Projects + tags handoff
 
-    private var projectsSection: some View {
-        SettingsSection(title: "Projects") {
-            ForEach(config.config.pomodoro.projects) { p in
-                HStack(spacing: 8) {
-                    ColorChip(hex: p.color)
-                    Text(p.name)
-                        .font(.system(size: 12))
-                    Spacer()
-                    Button(role: .destructive) {
-                        removeProject(p)
-                    } label: {
-                        Image(systemName: "trash")
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Remove")
+    private var projectsAndTagsNote: some View {
+        SettingsSection(title: "Projects & Tags") {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "info.circle")
+                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Projects and tags are stored in the database, not the config file.")
+                        .font(.system(size: 12, weight: .medium))
+                    Text("They appear automatically as you tag pomodoro sessions, and are managed alongside session history. Open the Pomodoro popover and click the session info card to add or rename them.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding(.vertical, 2)
+                Spacer(minLength: 0)
             }
-            AddProjectRow(onAdd: addProject)
         }
-    }
-
-    private func addProject(name: String, color: String) {
-        var draft = config.config
-        let trimmedName = name.trimmingCharacters(in: .whitespaces)
-        guard !trimmedName.isEmpty,
-              !draft.pomodoro.projects.contains(where: { $0.name == trimmedName })
-        else { return }
-        draft.pomodoro.projects.append(ProjectConfig(name: trimmedName, color: color))
-        config.save(draft)
-    }
-
-    private func removeProject(_ p: ProjectConfig) {
-        var draft = config.config
-        draft.pomodoro.projects.removeAll { $0.name == p.name }
-        config.save(draft)
-    }
-
-    // MARK: - Tags
-
-    private var tagsSection: some View {
-        SettingsSection(title: "Tags") {
-            StringListEditor(
-                items: config.config.pomodoro.tags,
-                placeholder: "Add tag",
-                onChange: { newList in
-                    var draft = config.config
-                    draft.pomodoro.tags = newList
-                    config.save(draft)
-                }
-            )
-        }
-    }
-
-    // MARK: - Binding helper
-
-    private func bind<T>(_ keyPath: WritableKeyPath<AppConfig, T>) -> Binding<T> {
-        Binding(
-            get: { config.config[keyPath: keyPath] },
-            set: { newValue in
-                var draft = config.config
-                draft[keyPath: keyPath] = newValue
-                config.save(draft)
-            }
-        )
-    }
-}
-
-// MARK: - Subviews specific to this form
-
-private struct MinutesStepper: View {
-    @Binding var value: Int
-    let range: ClosedRange<Int>
-    var body: some View {
-        Stepper(value: $value, in: range) {
-            Text("\(value) min")
-                .monospacedDigit()
-                .frame(width: 64, alignment: .leading)
-        }
-        .labelsHidden()
-    }
-}
-
-private struct ColorChip: View {
-    let hex: String
-    var body: some View {
-        RoundedRectangle(cornerRadius: 3)
-            .fill(Color(hex: hex) ?? .gray)
-            .frame(width: 14, height: 14)
-            .overlay(RoundedRectangle(cornerRadius: 3).stroke(.black.opacity(0.1)))
-    }
-}
-
-private struct AddProjectRow: View {
-    @State private var name = ""
-    @State private var color = "#3B82F6"
-    let onAdd: (String, String) -> Void
-
-    private static let palette = ["#3B82F6", "#10B981", "#F59E0B", "#EF4444",
-                                  "#8B5CF6", "#EC4899", "#14B8A6", "#6366F1"]
-
-    var body: some View {
-        HStack(spacing: 8) {
-            ColorChip(hex: color)
-            TextField("New project name", text: $name)
-                .textFieldStyle(.roundedBorder)
-                .font(.system(size: 12))
-                .onSubmit(submit)
-            Menu {
-                ForEach(Self.palette, id: \.self) { c in
-                    Button { color = c } label: {
-                        HStack {
-                            ColorChip(hex: c)
-                            Text(c)
-                        }
-                    }
-                }
-            } label: {
-                Text("Color").font(.system(size: 11))
-            }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
-            Button("Add", action: submit)
-                .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
-        }
-    }
-
-    private func submit() {
-        let trimmed = name.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return }
-        onAdd(trimmed, color)
-        name = ""
     }
 }

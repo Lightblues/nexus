@@ -38,6 +38,28 @@ struct FieldRow<Control: View>: View {
     }
 }
 
+/// Explicit number display + stepper. Native macOS Stepper hides its label by
+/// design — putting the number in a sibling Text gives users the actual value.
+struct NumberStepper: View {
+    @Binding var value: Int
+    let range: ClosedRange<Int>
+    var step: Int = 1
+    var suffix: String = ""
+    var width: CGFloat = 56
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(suffix.isEmpty ? "\(value)" : "\(value) \(suffix)")
+                .font(.system(size: 12))
+                .monospacedDigit()
+                .frame(width: width, alignment: .leading)
+            Stepper("", value: $value, in: range, step: step)
+                .labelsHidden()
+        }
+    }
+}
+
+
 /// Editor for an array of strings (used for tags + enrichApps). Items render
 /// as removable chips. New entries via inline TextField.
 struct StringListEditor: View {

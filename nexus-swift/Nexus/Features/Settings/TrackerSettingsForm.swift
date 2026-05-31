@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct TrackerSettingsForm: View {
-    @EnvironmentObject var config: ConfigService
+    @Binding var draft: AppConfig
     @EnvironmentObject var trackerService: TrackerService
 
     var body: some View {
@@ -62,20 +62,14 @@ struct TrackerSettingsForm: View {
 
     private var behaviorSection: some View {
         SettingsSection(title: "Behavior") {
-            Toggle("Enable tracker", isOn: bind(\.tracker.enabled))
+            Toggle("Enable tracker", isOn: $draft.tracker.enabled)
             FieldRow(label: "Poll interval") {
-                Stepper(value: bind(\.tracker.pollInterval), in: 1...60) {
-                    Text("\(config.config.tracker.pollInterval) sec")
-                        .monospacedDigit()
-                }
-                .labelsHidden()
+                NumberStepper(value: $draft.tracker.pollInterval,
+                              range: 1...60, suffix: "sec", width: 56)
             }
             FieldRow(label: "Idle threshold") {
-                Stepper(value: bind(\.tracker.idleThreshold), in: 30...600, step: 10) {
-                    Text("\(config.config.tracker.idleThreshold) sec")
-                        .monospacedDigit()
-                }
-                .labelsHidden()
+                NumberStepper(value: $draft.tracker.idleThreshold,
+                              range: 30...600, step: 10, suffix: "sec", width: 56)
             }
             Text("If no keyboard or mouse activity for this duration, the tracker pauses recording.")
                 .font(.system(size: 11))
@@ -90,36 +84,20 @@ struct TrackerSettingsForm: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             StringListEditor(
-                items: config.config.tracker.enrichApps,
+                items: draft.tracker.enrichApps,
                 placeholder: "App name (e.g. \"Code\", \"Google Chrome\")",
-                onChange: { newList in
-                    var draft = config.config
-                    draft.tracker.enrichApps = newList
-                    config.save(draft)
-                }
+                onChange: { newList in draft.tracker.enrichApps = newList }
             )
         }
     }
 
     private var privacySection: some View {
         SettingsSection(title: "Privacy") {
-            Toggle("Record raw window titles",
-                   isOn: bind(\.tracker.recordTitle))
+            Toggle("Record raw window titles", isOn: $draft.tracker.recordTitle)
             Text("When enabled, the original window title is stored alongside each record. Useful for debugging — disabled by default since titles can leak PII.")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
-    }
-
-    private func bind<T>(_ keyPath: WritableKeyPath<AppConfig, T>) -> Binding<T> {
-        Binding(
-            get: { config.config[keyPath: keyPath] },
-            set: { newValue in
-                var draft = config.config
-                draft[keyPath: keyPath] = newValue
-                config.save(draft)
-            }
-        )
     }
 }

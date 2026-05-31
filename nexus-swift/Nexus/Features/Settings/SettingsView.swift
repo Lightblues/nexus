@@ -1,13 +1,11 @@
 import SwiftUI
 
-/// Settings GUI. Reads from ConfigService, edits a draft @State, saves on commit.
-/// All field mutations call `service.save(draft)` which atomically rewrites
-/// ~/.ea/nexus/config.json and triggers the file-watcher hot-reload path
-/// (watcher's reload is suppressed for this self-write — see Config.swift).
+/// Settings GUI. Reads from ConfigService into a local `draft`, edits the draft,
+/// commits all changes via Save. Eliminates per-keystroke disk writes (the cause
+/// of tab-switch lag and excessive ConfigService→form rebind churn).
 ///
-/// Bottom toolbar gives access to the raw JSON file: "Reveal in Finder" follows
-/// the symlink (so users on mackup land in the backup dir directly) and "Open
-/// in Editor" launches the user's default `.json` handler.
+/// The draft is owned by SettingsView so navigating between sub-tabs preserves
+/// in-flight edits; all sub-forms bind into the same `$draft`.
 struct SettingsView: View {
     @EnvironmentObject var config: ConfigService
 
@@ -32,17 +30,36 @@ struct SettingsView: View {
         }
     }
     @State private var tab: Tab = .pomodoro
+    @State private var draft: AppConfig = AppConfig()
+    @State private var initialized = false
 
     var body: some View {
         VStack(spacing: 0) {
             tabBar
+            Divider()
+            saveBar
             Divider()
             ScrollView { tabContent.padding(20) }
             Divider()
             bottomBar
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onAppear {
+            if !initialized {
+                draft = config.config
+                initialized = true
+            }
+        }
+        // Pull in external edits (e.g., user hand-edited config.json) when
+        // the user has no unsaved changes — otherwise leave their draft alone.
+        .onChange(of: config.config) { newValue in
+            if !isDirty {
+                draft = newValue
+            }
+        }
     }
+
+    private var isDirty: Bool { draft != config.config }
 
     // MARK: - Tab bar
 
@@ -69,15 +86,40 @@ struct SettingsView: View {
         .background(.ultraThinMaterial)
     }
 
+    // MARK: - Save bar
+
+    private var saveBar: some View {
+        HStack(spacing: 8) {
+            Image(systemName: isDirty ? "circle.fill" : "checkmark.circle.fill")
+                .font(.system(size: 9))
+                .foregroundStyle(isDirty ? Color.orange : Color.green)
+            Text(isDirty ? "Unsaved changes" : "Saved")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+            Spacer()
+            Button("Revert") { draft = config.config }
+                .controlSize(.small)
+                .disabled(!isDirty)
+            Button("Save") { config.save(draft) }
+                .controlSize(.small)
+                .keyboardShortcut("s", modifiers: .command)
+                .buttonStyle(.borderedProminent)
+                .disabled(!isDirty)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(isDirty ? Color.orange.opacity(0.06) : Color.clear)
+    }
+
     // MARK: - Content
 
     @ViewBuilder
     private var tabContent: some View {
         switch tab {
-        case .pomodoro: PomodoroSettingsForm()
-        case .tracker:  TrackerSettingsForm()
-        case .uploader: UploaderSettingsForm()
-        case .hotkey:   HotkeySettingsForm()
+        case .pomodoro: PomodoroSettingsForm(draft: $draft)
+        case .tracker:  TrackerSettingsForm(draft: $draft)
+        case .uploader: UploaderSettingsForm(draft: $draft)
+        case .hotkey:   HotkeySettingsForm(draft: $draft)
         }
     }
 
@@ -85,8 +127,7 @@ struct SettingsView: View {
 
     private var bottomBar: some View {
         HStack(spacing: 8) {
-            Image(systemName: "doc.text")
-                .foregroundStyle(.tertiary)
+            Image(systemName: "doc.text").foregroundStyle(.tertiary)
             Text("config.json")
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(.secondary)
@@ -106,8 +147,6 @@ struct SettingsView: View {
     }
 
     private var displayPath: String {
-        // Show the resolved target path so mackup users see the backup location;
-        // useful confirmation that the symlink works.
         let url = Paths.configFile
         if let resolved = try? FileManager.default.destinationOfSymbolicLink(atPath: url.path) {
             return "→ \(resolved)"
@@ -116,8 +155,6 @@ struct SettingsView: View {
     }
 
     private func revealInFinder() {
-        // Resolve symlink before revealing — so we land on the real file in the
-        // mackup backup dir, not the symlink itself.
         let url = Paths.configFile
         let resolved = (try? URL(fileURLWithPath: FileManager.default
             .destinationOfSymbolicLink(atPath: url.path))) ?? url

@@ -48,6 +48,8 @@ final class AppEnvironment: ObservableObject {
 
         // One-shot import of legacy JSON files. Idempotent.
         _ = await LegacyMigration.runIfNeeded(db: database)
+        // After session data is in DB, populate project + tag catalogs.
+        await CatalogMigration.runIfNeeded(db: database)
 
         await pomodoroRepository.refresh()
         pomodoro.hydrate()

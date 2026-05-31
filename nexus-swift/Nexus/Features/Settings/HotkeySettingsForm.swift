@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct HotkeySettingsForm: View {
-    @EnvironmentObject var config: ConfigService
+    @Binding var draft: AppConfig
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
@@ -15,7 +15,7 @@ struct HotkeySettingsForm: View {
         SettingsSection(title: "Command Palette") {
             FieldRow(label: "Shortcut") {
                 TextField("CommandOrControl+Shift+Space",
-                          text: bind(\.hotkey.palette))
+                          text: $draft.hotkey.palette)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(size: 11, design: .monospaced))
             }
@@ -28,22 +28,10 @@ struct HotkeySettingsForm: View {
 
     private var generalSection: some View {
         SettingsSection(title: "Startup") {
-            Toggle("Launch Nexus at login",
-                   isOn: bind(\.ui.openAtLogin))
+            Toggle("Launch Nexus at login", isOn: $draft.ui.openAtLogin)
             Text("Registers Nexus with macOS Login Items. Takes effect immediately.")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
         }
-    }
-
-    private func bind<T>(_ keyPath: WritableKeyPath<AppConfig, T>) -> Binding<T> {
-        Binding(
-            get: { config.config[keyPath: keyPath] },
-            set: { newValue in
-                var draft = config.config
-                draft[keyPath: keyPath] = newValue
-                config.save(draft)
-            }
-        )
     }
 }
