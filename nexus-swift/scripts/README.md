@@ -52,6 +52,8 @@ For tracking regressions across phases, the numbers we've measured so far:
 | Electron 0.7 (5-proc) | shipped | ~230 MB | 297 MB | sum across main + 4 helpers |
 | Swift Debug | Phase 1 | ~80 MB | 3.0 MB | Pomodoro only |
 | Swift Debug + debugger | Phase 2 | 60 MB | 3.9 MB | Tracker added; lldb attached |
-| **Swift Release** | **Phase 2** | **19 MB** | **2.6 MB** | what users will see |
+| Swift Release | Phase 2 | 19 MB | 2.6 MB | what users will see |
+| Swift Release | Phase 3.0 | 18.6 MB | 2.6 MB | + GRDB + 32k tracker rows in SQLite |
+| **Swift Release** | **Phase 3** | **17.8 MB** | **2.6 MB** | + Stats + Settings (no Yams) |
 
 Run on the same machine (Apple Silicon M-series) to keep numbers comparable.

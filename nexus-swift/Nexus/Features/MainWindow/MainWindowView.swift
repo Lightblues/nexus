@@ -16,11 +16,11 @@ struct MainWindowView: View {
         } detail: {
             switch route {
             case .stats:
-                ComingSoonView(title: "Statistics", note: "Activity calendar + weekly chart land in the next phase.")
+                StatsView()
             case .tracker:
                 TrackerView()
             case .settings:
-                ComingSoonView(title: "Settings", note: "YAML editor lands in the next phase.\nFor now, edit ~/.ea/nexus/config.yaml directly — changes hot-reload.")
+                SettingsView()
             }
         }
         .navigationTitle(route.label)

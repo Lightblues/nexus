@@ -44,6 +44,8 @@ final class AppEnvironment: ObservableObject {
         config.bootstrap()
         notifier.setup()
 
+        Paths.cleanupLegacyFiles()
+
         // One-shot import of legacy JSON files. Idempotent.
         _ = await LegacyMigration.runIfNeeded(db: database)
 

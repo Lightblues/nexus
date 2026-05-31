@@ -49,7 +49,16 @@ final class MainWindowController: NSObject {
         win.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
         win.titlebarAppearsTransparent = false
         win.isReleasedWhenClosed = false
-        win.center()
+        // AppKit autosave persists frame to UserDefaults under this key.
+        // Replaces the legacy ~/.ea/nexus/window-state.json — that file is
+        // user-data territory but window geometry is per-machine UI state,
+        // which is what UserDefaults is for.
+        win.setFrameAutosaveName("MainWindow")
+        // First-launch fallback if no saved frame exists.
+        if win.frame.size.width < 100 {
+            win.setContentSize(NSSize(width: 900, height: 600))
+            win.center()
+        }
         win.delegate = self
         return win
     }

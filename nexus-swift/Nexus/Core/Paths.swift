@@ -12,6 +12,9 @@ enum Paths {
     static var dbFile: URL        { root.appendingPathComponent("nexus.db") }
     static var dataFile: URL      { root.appendingPathComponent("data.json") }
     static var uploaderFile: URL  { root.appendingPathComponent("uploader.json") }
+    /// Legacy from Electron build. We no longer use this — AppKit autosaves
+    /// window frame to UserDefaults. `cleanupLegacyFiles()` renames it to .bak.
+    static var legacyWindowStateFile: URL { root.appendingPathComponent("window-state.json") }
 
     static var archiveDir: URL    { root.appendingPathComponent("archive", isDirectory: true) }
     static var trackerDir: URL    { root.appendingPathComponent("tracker", isDirectory: true) }
@@ -35,5 +38,17 @@ enum Paths {
         for dir in [root, archiveDir, trackerDir, uploaderCacheDir, logsDir] {
             try fm.createDirectory(at: dir, withIntermediateDirectories: true)
         }
+    }
+
+    /// Rename obsolete files to *.bak so users can recover them if they want.
+    /// Currently:
+    ///   - window-state.json (Electron-era; AppKit handles frame autosave now)
+    static func cleanupLegacyFiles() {
+        let fm = FileManager.default
+        let stale = legacyWindowStateFile
+        guard fm.fileExists(atPath: stale.path) else { return }
+        let bak = stale.appendingPathExtension("bak")
+        try? fm.removeItem(at: bak)
+        try? fm.moveItem(at: stale, to: bak)
     }
 }
