@@ -8,6 +8,12 @@ import Combine
 final class PaletteController: ObservableObject {
     private var panel: PalettePanel?
     private weak var environment: AppEnvironment?
+    /// Monitors clicks anywhere outside our app while the panel is up.
+    private var globalClickMonitor: Any?
+    /// Monitors clicks inside our app — needed because `addGlobalMonitor` only
+    /// fires for events outside the current app, and the user might click on
+    /// the menu bar or another Nexus window.
+    private var localClickMonitor: Any?
 
     func attach(environment: AppEnvironment) {
         self.environment = environment
@@ -27,12 +33,48 @@ final class PaletteController: ObservableObject {
         positionOnActiveScreen(panel)
         panel.orderFrontRegardless()
         panel.makeKey()
+        installClickOutsideMonitors()
         // Notify the SwiftUI view to focus the search field + reset state.
         NotificationCenter.default.post(name: .paletteDidShow, object: nil)
     }
 
     func hide() {
         panel?.orderOut(nil)
+        removeClickOutsideMonitors()
+    }
+
+    // MARK: - Click-outside dismissal
+
+    /// Because the palette is a non-activating panel, macOS doesn't give us a
+    /// "lost focus → resign key" signal when the user clicks elsewhere. We
+    /// install two NSEvent monitors:
+    ///   - global: catches clicks in any other app
+    ///   - local:  catches clicks in our own app (menu bar, MainWindow, etc.)
+    /// Either fires → dismiss.
+    private func installClickOutsideMonitors() {
+        removeClickOutsideMonitors()
+        let mask: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+        globalClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: mask) { [weak self] _ in
+            // Global monitor only fires for events outside our app — any hit
+            // here means the user clicked into another app.
+            Task { @MainActor in self?.hide() }
+        }
+        localClickMonitor = NSEvent.addLocalMonitorForEvents(matching: mask) { [weak self] event in
+            // Local monitor fires for events in our app. If the click is on
+            // the palette itself, leave it alone; if it's on any other Nexus
+            // window (menu bar status item, MainWindow), dismiss.
+            guard let self else { return event }
+            if event.window === self.panel {
+                return event   // user is interacting with the palette — keep it open
+            }
+            self.hide()
+            return event       // let the click through to its target
+        }
+    }
+
+    private func removeClickOutsideMonitors() {
+        if let m = globalClickMonitor { NSEvent.removeMonitor(m); globalClickMonitor = nil }
+        if let m = localClickMonitor  { NSEvent.removeMonitor(m); localClickMonitor = nil }
     }
 
     // MARK: - Internals
