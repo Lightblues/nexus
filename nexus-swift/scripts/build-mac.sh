@@ -47,6 +47,10 @@ if [[ -f "$PBXPROJ" ]]; then
   fi
 fi
 
+# Clean previous build artifacts. Keep $DIST_DIR contents from earlier
+# versions so the user can compare; we just overwrite our specific filename.
+rm -rf "$BUILD_DIR/archive" "$BUILD_DIR/export"
+mkdir -p "$DIST_DIR" "$BUILD_DIR/archive" "$BUILD_DIR/export"
 
 # Archive (Release, universal). Using `archive` instead of `build` so the
 # resulting .xcarchive is what xcodebuild -exportArchive expects.
