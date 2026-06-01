@@ -23,7 +23,8 @@ build/dmg-stage/
 *.dmg
 dist/
 
-# build/ holds source assets (icon.png) that must stay tracked. The global
-# gitignore excludes the directory wholesale; re-include it explicitly.
+# build/ also holds tracked source assets (icon.png). The user's global
+# gitignore excludes `build/` wholesale; re-include only the assets we ship,
+# *not* the build subdirectories above (which must stay ignored).
 !build/
-!build/*
+!build/icon.png

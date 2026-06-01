@@ -1,181 +1,234 @@
 # Architecture
 
 ## Overview
-**Nexus** — macOS menu bar toolkit (Pomodoro timer, image uploader, time tracker).
 
-- **Platform**: macOS (Menu Bar interaction)
-- **Bundle ID**: `site.easonsi.nexus`
-- **Data/Config**: `~/.ea/nexus/`
-- **Tech Stack**: Electron + Vite + React + TypeScript
-- **Package Manager**: pnpm (enforced via `preinstall` hook + `engines`)
-- **Architecture**: Main-Process-as-Source-of-Truth, modular features
-- **UX Pattern**: Tray Popover (Menubar Icon → Click → Floating Frameless Window)
-- **Distribution**: Homebrew cask via [`lightblues/homebrew-tap`](https://github.com/Lightblues/homebrew-tap)
+Single-process macOS app. The Swift rewrite replaces the predecessor Electron
+build's main + 4 helper processes with one binary that hosts: status item,
+popover, main window, palette panel, and all background services. (Electron-era
+files referenced below as `src/...` lived in the now-archived `legacy/electron`
+git tag — kept here for context on what got collapsed.)
 
-## Directory Structure
+- **Platform**: macOS 13.0+ (Ventura)
+- **UI**: SwiftUI for content, AppKit for windowing primitives that SwiftUI can't express
+  cleanly (NSPanel palette, NSStatusItem, drag receiver on the status button)
+- **Concurrency**: Swift Concurrency (`async`/`await`, `Task`, `AsyncStream`)
+- **State**: `@Observable` services held by an `AppEnvironment` singleton, injected via
+  `.environment(_:)`. No global mutable state outside that container.
+- **Persistence**: codable JSON files in `~/.ea/nexus/` (schema-compatible with Electron),
+  YAML config via [Yams](https://github.com/jpsim/Yams)
+- **No IPC layer**: services and views run in the same process. The `IPC` channel
+  constants in `src/shared/ipc.ts` collapse into direct method calls on services.
+
+## Why no SwiftUI `MenuBarExtra`?
+
+`MenuBarExtra` (macOS 13+) is tempting but constrains us:
+- Drop-target on the status button (uploader feature) needs the underlying NSStatusItem
+  view, which `MenuBarExtra` hides.
+- Custom popover sizing/animation (320×400 frameless float) needs `NSPopover` directly.
+- Title text changes 1Hz during pomodoro: `MenuBarExtra` re-renders the whole label
+  view; `NSStatusItem.button.attributedTitle` is a single property write.
+
+Decision: use AppKit `NSStatusItem` + `NSPopover`, hosted in an `NSApplicationDelegate`.
+SwiftUI views are embedded via `NSHostingController`. (See SADR-002.)
+
+## Target Layout
+
+Single Xcode project, **one app target**, no extensions for v1:
 
 ```
-src/
-├── shared/                     # Cross-process shared code
-│   ├── types.ts                # All shared interfaces (single source of truth)
-│   └── ipc.ts                  # IPC channel name constants (type-safe)
-├── main/
-│   ├── core/                   # Infrastructure
-│   │   ├── index.ts
-│   │   ├── ConfigManager.ts    # YAML config with hot-reload (fs.watch)
-│   │   ├── DataManager.ts      # electron-store + auto-archiving
-│   │   ├── PathManager.ts      # ~/.ea/nexus/ paths
-│   │   ├── TrayManager.ts      # Icon, title, click, file drop
-│   │   ├── PopupWindow.ts      # Frameless popover
-│   │   ├── MainWindow.ts       # Standard window (stats/settings/tracker)
-│   │   ├── PaletteWindow.ts    # Frameless centered command palette
-│   │   ├── GlobalHotkey.ts     # electron globalShortcut wrapper
-│   │   ├── UrlSchemeHandler.ts # nexus:// protocol → CommandRegistry
-│   │   ├── CommandRegistry.ts  # Single table of commands (palette + URL share)
-│   │   ├── PermissionManager.ts # macOS accessibility permission
-│   │   └── Logger.ts           # electron-log wrapper
-│   ├── features/
-│   │   ├── pomodoro/           # Timer + stats + commands
-│   │   ├── tracker/            # Auto window tracking
-│   │   ├── uploader/           # Image upload to GitHub
-│   │   ├── palette/            # Command palette IPC
-│   │   └── settings/           # Config editor
-│   └── index.ts                # Entry: init core → register IPC → start services
-├── preload/
-│   └── index.ts                # contextBridge API (imports from @shared)
-└── renderer/
-    └── src/
-        ├── env.d.ts            # Window.api types (imports from @shared)
-        ├── components/         # Button, Card, ErrorBoundary
-        ├── features/           # Feature UI modules
-        └── App.tsx             # View router (hash-based)
+Nexus.xcodeproj
+└── Nexus/
+    ├── App/
+    │   ├── NexusApp.swift              # @main, AppDelegate adapter
+    │   ├── AppDelegate.swift           # NSApp lifecycle, status item, popover, panels
+    │   └── AppEnvironment.swift        # DI container — owns all services
+    ├── Core/
+    │   ├── Paths.swift                 # ~/.ea/nexus/ paths (mirrors PathManager.ts)
+    │   ├── Config.swift                # YAML load/save + hot-reload (DispatchSource)
+    │   ├── ConfigSchema.swift          # Codable structs matching config.yaml
+    │   ├── DataStore.swift             # Generic JSON file store (debounced writes)
+    │   ├── Logger.swift                # OSLog + file mirror at ~/.ea/nexus/logs/main.log
+    │   ├── Permissions.swift           # AXIsProcessTrusted + grant prompt
+    │   ├── Notifications.swift         # UNUserNotificationCenter wrapper
+    │   ├── HotKey.swift                # Carbon RegisterEventHotKey wrapper
+    │   ├── URLScheme.swift             # NSAppleEventManager handler for nexus://
+    │   └── CommandRegistry.swift       # Single command table; palette + URL share it
+    ├── Features/
+    │   ├── Pomodoro/
+    │   │   ├── PomodoroService.swift   # @Observable state machine + timer
+    │   │   ├── PomodoroStore.swift     # data.json read/write + archiving
+    │   │   ├── PomodoroCommands.swift  # Registers commands with CommandRegistry
+    │   │   └── Views/
+    │   │       ├── PomodoroPopoverView.swift
+    │   │       ├── EditSessionModal.swift
+    │   │       ├── StatsView.swift     # Activity calendar + bar + timeline
+    │   │       └── ActivityCalendar.swift  # Custom Canvas-drawn heatmap
+    │   ├── Tracker/
+    │   │   ├── TrackerService.swift    # AX polling, merge algorithm
+    │   │   ├── TrackerStore.swift      # tracker/YYYY-MM-DD.json
+    │   │   ├── ContextEnricher.swift   # VSCode/browser title parsing
+    │   │   └── Views/
+    │   │       ├── TrackerView.swift
+    │   │       ├── TrackerTimeline.swift
+    │   │       ├── AppUsageDonut.swift
+    │   │       └── AppRankList.swift
+    │   ├── Uploader/
+    │   │   ├── UploaderService.swift   # Drop, paste, upload orchestration
+    │   │   ├── UploaderStore.swift     # uploader.json + cache mgmt
+    │   │   ├── ImageCompressor.swift   # CGImageSource + ImageIO
+    │   │   ├── GitHubClient.swift      # URLSession-based REST client
+    │   │   └── Views/
+    │   │       ├── UploaderPopoverView.swift
+    │   │       └── DropZoneView.swift
+    │   ├── Palette/
+    │   │   ├── PaletteWindow.swift     # NSPanel subclass (non-activating)
+    │   │   ├── PaletteView.swift
+    │   │   └── PaletteSearch.swift     # Substring + subsequence scoring
+    │   ├── Settings/
+    │   │   └── SettingsView.swift      # YAML text editor (NSTextView wrapper)
+    │   └── MainWindow/
+    │       ├── MainWindow.swift        # NSWindow w/ sidebar nav
+    │       └── Sidebar.swift
+    └── Resources/
+        ├── Assets.xcassets             # Tray icons (Template), app icon
+        ├── default-config.yaml         # Embedded fallback (same as Electron resources/)
+        └── Info.plist                  # LSUIElement, URL scheme, AX usage description
 ```
 
-## Shared Type System (`src/shared/`)
+## App Lifecycle
 
-All interfaces shared across main/preload/renderer are defined once in `src/shared/types.ts`. Both tsconfig files include `src/shared/` and define path alias `@shared/*`.
-
-**Alias config** (`electron.vite.config.ts` + `tsconfig.*.json`):
-```typescript
-resolve: { alias: { '@shared': resolve(__dirname, 'src/shared') } }
+```
+NSApp launch
+  ↓
+AppDelegate.applicationDidFinishLaunching
+  ↓
+AppEnvironment.bootstrap()
+    Paths.ensureDirectories()
+    Config.load()  → start hot-reload watcher
+    Logger.start()
+    PomodoroStore.runArchiveSweep()       # 90-day cutoff (ADR-004)
+    TrackerStore.loadToday()
+    CommandRegistry.shared.registerBuiltins()
+    PomodoroCommands.register()
+    TrackerCommands.register()
+    UploaderCommands.register()
+    URLScheme.install()                   # NSAppleEventManager
+    HotKey.install(palette: cfg.hotkey)   # Configurable (ADR-010)
+    StatusItem.create()                   # NSStatusItem, image, drag types
+    Popover.prepare()                     # Lazy: build NSHostingController on first show
+    if cfg.tracker.enabled: TrackerService.start()
 ```
 
-Feature-specific main-process-only types (e.g., `Buffer`-based `ImageMetaMain`) remain in their feature `types.ts` and re-export shared types.
+## Service / View Boundary
 
-## IPC Type Safety (`src/shared/ipc.ts`)
+Services own state and side effects. Views are read-only consumers (apart from action
+methods on the service). This mirrors the Electron "main = source of truth, renderer =
+projection" principle (architecture.md "Main-Process-as-Source-of-Truth"), but with
+direct method calls instead of IPC.
 
-All IPC channel names defined as `as const` object:
-```typescript
-export const IPC = {
-  pomodoro: { start: 'pomodoro:start', pause: 'pomodoro:pause', ... },
-  stats:    { getToday: 'stats:get-today', ... },
-  config:   { get: 'config:get', ... },
-  tracker:  { getStatus: 'tracker:get-status', ... },
-  uploader: { upload: 'uploader:upload', imageDropped: 'uploader:image-dropped', ... },
-  window:   { openStats: 'window:open-stats', openSettings: 'window:open-settings' },
-} as const
-```
-Both preload and `*.ipc.ts` handlers import from `@shared/ipc`. Renaming/deleting a channel → compile-time error on both sides.
-
-## Data & Configuration
-
-### Config (`~/.ea/nexus/config.yaml`)
-- Library: `js-yaml`
-- Hot-reload: `fs.watch()` + debounce → `config:updated` event
-- Merge with defaults on load (missing keys get default values)
-
-### Data (`~/.ea/nexus/data.json`)
-- Library: `electron-store`
-- Contains: pomodoro stats + metadata (projects, tags, lastSession)
-- **Auto-archiving**: Sessions older than 90 days moved to `~/.ea/nexus/archive/pomodoro-{YYYY}.json` on app startup. Prevents unbounded growth of the main data file.
-- `getAllSessions()` merges active + archived for long-range views (activity calendar)
-
-### Logging (`~/.ea/nexus/logs/main.log`)
-- Library: `electron-log`
-
-## Window Architecture
-
-### PopupWindow (Tray Popover)
-- Frameless, transparent, always-on-top, visible on all workspaces
-- Hide on blur
-- Positioned centered below tray icon
-- Views: Dashboard → Pomodoro / Uploader (state-based routing)
-
-### MainWindow
-- Standard frame, resizable (900×600 default, 700×400 min)
-- Sidebar navigation: Statistics / Time Tracker / Settings
-- Hash-based routing (`#/stats`, `#/tracker`, `#/settings`)
-- **Window type detection**: Purely URL-hash-based (no `innerWidth` heuristic). PopupWindow loads without hash → dashboard. MainWindow always loads with `#/stats` etc.
-
-### Tray
-- Left click: toggle popup
-- Right click: context menu (Show Main Window / About / Quit)
-- File drop: capture image → trigger uploader
-- Title: idle=empty, pomodoro running=countdown ` 24:59`
-
-## Error Handling
-
-### ErrorBoundary (`src/renderer/src/components/ErrorBoundary.tsx`)
-- React class component wrapping each feature view independently
-- One view crash doesn't affect others
-- Fallback: error message + Retry button
-- Wrapped at: Popup (PomodoroView, UploaderView) and MainWindow (StatsView, TrackerView, SettingsView)
-
-### IPC Listener Cleanup
-All preload `ipcRenderer.on()` listeners return cleanup functions. Renderer components call cleanup in `useEffect` return to prevent memory leaks on remount.
-
-```typescript
-// preload pattern
-onTick: (callback): (() => void) => {
-  const handler = (_event, seconds) => callback(seconds)
-  ipcRenderer.on(IPC.pomodoro.tick, handler)
-  return () => ipcRenderer.removeListener(IPC.pomodoro.tick, handler)
+```swift
+@Observable @MainActor
+final class PomodoroService {
+    private(set) var state: PomodoroState = .idle
+    private(set) var remaining: TimeInterval = 0
+    func start(metadata: SessionMetadata) { ... }
+    func pause() { ... }
+    func resume() { ... }
+    func finishEarly() { ... }
+    func exit() { ... }
 }
 
-// renderer pattern
-useEffect(() => {
-  const cleanup = window.api.pomodoro.onTick(...)
-  return cleanup
-}, [])
+struct PomodoroPopoverView: View {
+    @Environment(PomodoroService.self) private var pomodoro
+    var body: some View {
+        // observe pomodoro.state, pomodoro.remaining
+    }
+}
 ```
 
-## Distribution & CI
+The `IPC` constants table (`src/shared/ipc.ts`) goes away entirely — there's no channel
+to keep type-safe. Service method signatures are the contract.
 
-### Install
-```bash
-brew install --cask lightblues/tap/nexus
+## Persistence Layer (`Core/DataStore.swift`)
+
+Generic actor that handles debounced JSON writes:
+
+```swift
+actor DataStore<T: Codable> {
+    let url: URL
+    private var pending: T?
+    private var flushTask: Task<Void, Never>?
+
+    func write(_ value: T) {
+        pending = value
+        flushTask?.cancel()
+        flushTask = Task {
+            try? await Task.sleep(for: .milliseconds(200))
+            await flush()
+        }
+    }
+    func flush() async { /* atomic write to .tmp + rename */ }
+}
 ```
 
-### Build & Release Pipeline (`build.yml`)
-Tag-triggered single workflow handles the full release cycle:
+Replaces electron-store's per-`.set()` full-file rewrite with a 200ms debounce. Each
+feature owns its own typed `DataStore<T>` — no global key/value bag.
 
-```
-git tag nexus-vX.Y.Z && git push --tags
-    ↓
-build job (macos-latest):
-  pnpm install → pnpm build → electron-builder --mac --arm64/x64
-  electron-builder applies ad-hoc codesign via mac.identity: '-'
-    ↓
-release job (ubuntu-latest):
-  Create GitHub Release with DMGs
-  Compute sha256 from downloaded artifacts
-  Push version + sha256 bump to lightblues/homebrew-tap/Casks/nexus.rb
-    ↓
-brew upgrade --cask nexus picks up new version
-```
+## Logging
 
-### Code Signing (no Apple Developer ID)
-- **Ad-hoc codesign**: `electron-builder.yml` → `mac.identity: '-'` delegates to `@electron/osx-sign`, which signs nested frameworks/helpers inside-out (correct for Electron's bundle structure). Do **not** use `codesign --deep` manually — it signs outside-in and breaks the nested signature chain. (ADR-011)
-- **Quarantine strip**: Homebrew cask `postflight` runs `xattr -dr com.apple.quarantine` so users don't see the Gatekeeper "cannot verify developer" dialog.
-- **Consequence**: App launches cleanly on Apple Silicon and Intel without developer account. Users must trust the tap.
+Two sinks:
+- `OSLog` (subsystem `site.easonsi.nexus`, categories per feature) — visible in Console.app
+- File mirror at `~/.ea/nexus/logs/main.log` for parity with the Electron build (5 MB
+  rotation, `.1` suffix on rollover)
 
-### Homebrew Tap (`lightblues/homebrew-tap`)
-- Cask definition: `Casks/nexus.rb` — architecture-aware (`arch arm: "arm64", intel: "x64"`), per-arch sha256.
-- Auto-bump: `build.yml` release job pushes cask updates via `TAP_PUSH_TOKEN` secret (fine-grained PAT, Contents:write on `homebrew-tap`).
-- Fallback: `update-tap.yml` (`workflow_dispatch` only) for manual re-runs.
-- One tap can host multiple casks/formulae for future projects.
+`Logger.swift` provides `Logger.pomodoro`, `Logger.tracker`, etc.
 
-### Secrets
-| Secret | Repo | Purpose |
-|--------|------|---------|
-| `TAP_PUSH_TOKEN` | `Lightblues/nexus` | Fine-grained PAT (Contents:write on `homebrew-tap`). Used by release job to push cask updates. |
+## Permissions (`Core/Permissions.swift`)
+
+The Electron build cycled through `node-mac-permissions` and a custom permission UI
+(PermissionManager.ts). Swift uses the system APIs directly:
+
+| Permission | API | Trigger point |
+|---|---|---|
+| Accessibility (AX) | `AXIsProcessTrustedWithOptions(prompt: true)` | TrackerService.start() |
+| Notifications | `UNUserNotificationCenter.requestAuthorization` | First pomodoro completion |
+| Apple Events (browser URL) | `AEDeterminePermissionToAutomateTarget` | First browser title needing URL |
+
+If AX is denied: TrackerService stays disabled, surfaces a banner in Settings → Tracker
+with a "Open System Settings" button (`x-apple.systempreferences:`).
+
+## Distribution
+
+`xcodebuild -archive` → `xcodebuild -exportArchive` → `create-dmg` → Sparkle appcast
+update.
+
+- Codesign: ad-hoc (`-` identity), same constraint as Electron build (no Apple Developer
+  ID). The Electron-side ADR-011 problem (`--deep` breaking nested signatures) doesn't
+  apply — single-binary app, no nested frameworks beyond Sparkle's `Autoupdate.app`.
+- Quarantine: Homebrew cask `postflight` continues to strip `com.apple.quarantine`.
+- Universal binary: `ARCHS = arm64 x86_64`, single DMG drops the per-arch split. Cask
+  simplifies (no `arch` block).
+- See `migration.md` for the rollout plan.
+
+## What Maps from the Electron Spec
+
+| Electron concept | Swift equivalent |
+|---|---|
+| `src/shared/types.ts` | `Core/ConfigSchema.swift` + per-feature model files |
+| `src/shared/ipc.ts` | **deleted** — direct service method calls |
+| `src/preload/index.ts` | **deleted** — no privilege boundary |
+| `ConfigManager.ts` + `fs.watch` | `Config.swift` + `DispatchSource.makeFileSystemObjectSource` |
+| `DataManager.ts` (electron-store) | `DataStore<T>` actor |
+| `PathManager.ts` | `Paths.swift` (static enum) |
+| `TrayManager.ts` | `AppDelegate` + `NSStatusItem` |
+| `PopupWindow.ts` | `NSPopover` containing `NSHostingController` |
+| `MainWindow.ts` | `NSWindowController` + `NSHostingController` |
+| `PaletteWindow.ts` (panel-style, ADR-013) | `NSPanel` subclass with `.nonactivatingPanel` style |
+| `GlobalHotkey.ts` | `HotKey.swift` (Carbon `RegisterEventHotKey`) |
+| `UrlSchemeHandler.ts` | `URLScheme.swift` (`NSAppleEventManager`) |
+| `CommandRegistry.ts` | `CommandRegistry.swift` (same shape, Swift struct values) |
+| `ErrorBoundary.tsx` (per-feature) | n/a — Swift exceptions don't crash the process; per-view `Result`-typed bindings + a small `FailureView` modifier |
+| `electron-log` | `Logger.swift` (OSLog + file mirror) |
+| Auto-archiving (ADR-004) | `PomodoroStore.runArchiveSweep()` at launch |
+| IPC listener cleanup (ADR-005) | n/a — `@Observable` handles teardown automatically |
+| Hash routing (ADR-006) | enum `MainRoute { case stats, tracker, settings }` |

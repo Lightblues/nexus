@@ -13,7 +13,7 @@ archived at the `legacy/electron` git tag.
 - **Release**: bump `CFBundleShortVersionString` in `project.yml`, tag `nexus-vX.Y.Z`, push → CI builds DMG, creates GitHub Release, bumps Homebrew cask
 - **Bundle ID**: `site.easonsi.nexus` (frozen — Mackup + AX permission continuity)
 - **Data**: `~/.ea/nexus/`
-- **Spec**: `.ea/spec/swift/` (active spec). `.ea/spec/*.md` at the top level is the Electron-era historical spec, kept for reference.
+- **Spec**: `.ea/spec/` (active spec — `spec.md` is the index). `.ea/spec/legacy-electron/` holds two preserved Electron-era files (architecture, decisions) for SADR cross-reference. Full Electron sources at the `legacy/electron` git tag.
 
 ## Coding Style
 - Compact and type-hinted
