@@ -33,6 +33,7 @@ private struct SettingsTrampoline: View {
             .onChange(of: hostWindow) { _ in route() }
     }
 
+    @MainActor
     private func route() {
         appDelegate.environment.mainWindow.show(route: .settings)
         // Close the (invisible) SwiftUI Settings window on the next runloop
