@@ -1,6 +1,15 @@
 # Migration: Electron → Swift
 
-The user's `~/.ea/nexus/` directory must keep working across the version cutover.
+Two distinct migration moments are documented here:
+
+1. **Electron → Swift (v1.0.0)**: First Swift build read all of the Electron
+   app's data files in place at `~/.ea/nexus/` and rewrote / imported them.
+   Compatibility matrix and one-shot logic below.
+2. **`~/.ea/nexus/` → standard macOS layout (v1.2.0)**: After the rewrite was
+   stable, all data moved to the system-furnished paths under `~/Library/...`.
+   See "v1.2.0 path migration" at the bottom and SADR-015.
+
+The user's `~/.ea/nexus/` directory must keep working across the v1.0.0 cutover.
 This file specs what data the Swift build must read on first launch and what (if
 anything) it rewrites.
 
@@ -136,3 +145,61 @@ on first migration write.
 | Hotkey grab on launch with Raycast also installed | conflict-free coexistence |
 | Drop image on tray icon | drop receiver works |
 | `nexus://command/pomodoro.start` from Shortcuts.app | URL scheme registered |
+
+---
+
+## v1.2.0 path migration: `~/.ea/nexus/` → standard macOS layout
+
+See SADR-015 for rationale. v1.2.0 stops reading or writing under
+`~/.ea/nexus/`; data lives at:
+
+| Kind | New path |
+|---|---|
+| Config + DB | `~/Library/Application Support/site.easonsi.nexus/` |
+| Cache | `~/Library/Caches/site.easonsi.nexus/` |
+| Logs | `~/Library/Logs/site.easonsi.nexus/` |
+
+### One-shot script (no in-app migration code)
+
+`scripts/migrate-data-v1.2.0.sh` is the canonical migration. Run **before**
+launching v1.2.0 for the first time:
+
+```bash
+./scripts/migrate-data-v1.2.0.sh
+```
+
+What it does:
+1. Quits any running Nexus (both `/Applications/Nexus.app` and Xcode debug builds).
+2. Detects no-op cases: already-migrated, or fresh install — exits cleanly.
+3. Creates the three new directories under `~/Library/`.
+4. `mv` user-critical files (`config.json`, `nexus.db`, `nexus.db-wal`,
+   `nexus.db-shm`) into Application Support. `mv` preserves symlinks so any
+   existing mackup chain on `config.json` survives.
+5. Archives the old root: `~/.ea/nexus/` → `~/.ea/nexus.pre-v1.2.0-bak-<timestamp>/`.
+   Caches (uploader thumbnails) and logs are not migrated — thumbnails rebuild
+   on the next upload, OSLog has its own retention.
+6. Cleans Electron-era residue: `~/Library/Application Support/nexus/`
+   (33 MB Chromium leftovers) and `~/Library/Logs/nexus/` get renamed to
+   `*.electron-bak-<timestamp>`.
+7. Idempotent — re-runs harmlessly.
+
+### Why the script and not in-app code
+
+Previous Electron→Swift migration code lived in `LegacyMigration.swift`.
+That code is **deleted in v1.2.0**: a one-time path move belongs in a script,
+not the app's hot path. Keeping migration logic out of the app:
+- Keeps app launch deterministic (no I/O before window appears)
+- No risk of a half-migrated state if the app crashes during the move
+- Failure surfaces in the user's terminal, not in main.log
+- Migration can be `--dry-run`-ed and re-tried independently
+
+### Rollback
+
+If v1.2.0 misbehaves, the path back is symmetric:
+
+```bash
+# Stop Nexus, then
+mv ~/.ea/nexus.pre-v1.2.0-bak-<timestamp> ~/.ea/nexus
+mv ~/Library/Application\ Support/site.easonsi.nexus ~/Library/Application\ Support/site.easonsi.nexus.v1.2.0-bak
+# Reinstall the previous .dmg from GitHub Releases (Nexus-1.1.0.dmg)
+```

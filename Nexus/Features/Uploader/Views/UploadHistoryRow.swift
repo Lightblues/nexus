@@ -109,8 +109,14 @@ struct UploadHistoryRow: View {
     private func loadThumbnail() async {
         guard let url = thumbnailURL else { thumbnail = nil; return }
         // Read off the main thread; NSImage(contentsOf:) is light but blocking.
-        let img = await Task.detached(priority: .utility) { NSImage(contentsOf: url) }.value
-        thumbnail = img
+        // We send `Data` (Sendable) across the actor boundary rather than the
+        // NSImage itself, since NSImage's Sendable conformance only exists on
+        // macOS 14+ — keeping this ferries-data-not-views pattern keeps the
+        // warning off and works back to the macOS 13 minimum.
+        let data = await Task.detached(priority: .utility) {
+            try? Data(contentsOf: url)
+        }.value
+        if let data { thumbnail = NSImage(data: data) }
     }
 
     private func openCDN() {

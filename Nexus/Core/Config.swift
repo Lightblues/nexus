@@ -1,8 +1,9 @@
 import Foundation
 
 /// JSON-backed config service with hot-reload via DispatchSourceFileSystemObject.
-/// Reads from ~/.ea/nexus/config.json; on missing file, copies the bundled
-/// default-config.json. Provides save() for the Settings GUI.
+/// Reads from `~/Library/Application Support/site.easonsi.nexus/config.json`; on
+/// missing file, copies the bundled default-config.json. Provides save() for the
+/// Settings GUI.
 @MainActor
 final class ConfigService: ObservableObject {
     @Published private(set) var config: AppConfig = AppConfig()

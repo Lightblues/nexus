@@ -14,8 +14,8 @@ git tag — kept here for context on what got collapsed.)
 - **Concurrency**: Swift Concurrency (`async`/`await`, `Task`, `AsyncStream`)
 - **State**: `@Observable` services held by an `AppEnvironment` singleton, injected via
   `.environment(_:)`. No global mutable state outside that container.
-- **Persistence**: codable JSON files in `~/.ea/nexus/` (schema-compatible with Electron),
-  YAML config via [Yams](https://github.com/jpsim/Yams)
+- **Persistence**: GRDB SQLite at `~/Library/Application Support/site.easonsi.nexus/nexus.db`,
+  JSON config alongside it. See "Data Layout" below.
 - **No IPC layer**: services and views run in the same process. The `IPC` channel
   constants in `src/shared/ipc.ts` collapse into direct method calls on services.
 
@@ -43,11 +43,11 @@ Nexus.xcodeproj
     │   ├── AppDelegate.swift           # NSApp lifecycle, status item, popover, panels
     │   └── AppEnvironment.swift        # DI container — owns all services
     ├── Core/
-    │   ├── Paths.swift                 # ~/.ea/nexus/ paths (mirrors PathManager.ts)
-    │   ├── Config.swift                # YAML load/save + hot-reload (DispatchSource)
-    │   ├── ConfigSchema.swift          # Codable structs matching config.yaml
+    │   ├── Paths.swift                 # bundle-id-keyed std macOS paths (FileManager.url(for:))
+    │   ├── Logger.swift                # OSLog + file mirror at ~/Library/Logs/site.easonsi.nexus/main.log
+    │   ├── Config.swift                # JSON load/save + hot-reload (DispatchSource)
+    │   ├── ConfigSchema.swift          # Codable structs matching config.json
     │   ├── DataStore.swift             # Generic JSON file store (debounced writes)
-    │   ├── Logger.swift                # OSLog + file mirror at ~/.ea/nexus/logs/main.log
     │   ├── Permissions.swift           # AXIsProcessTrusted + grant prompt
     │   ├── Notifications.swift         # UNUserNotificationCenter wrapper
     │   ├── HotKey.swift                # Carbon RegisterEventHotKey wrapper
@@ -149,6 +149,60 @@ struct PomodoroPopoverView: View {
 The `IPC` constants table (`src/shared/ipc.ts`) goes away entirely — there's no channel
 to keep type-safe. Service method signatures are the contract.
 
+## Data Layout
+
+Standard macOS layout, all keyed by bundle id `site.easonsi.nexus` (resolved via
+`FileManager.url(for:in:)` — no hardcoded paths):
+
+| Kind | Location | What lives here | Backed up by Time Machine? |
+|---|---|---|---|
+| User-critical | `~/Library/Application Support/site.easonsi.nexus/` | `config.json`, `nexus.db` (+ `-wal`, `-shm`) | ✅ |
+| Regenerable | `~/Library/Caches/site.easonsi.nexus/` | `uploader-thumbnails/{id}.webp` | ❌ (system may purge under disk pressure) |
+| Logs | `~/Library/Logs/site.easonsi.nexus/` | `main.log` + 4 rotated generations (`.1`..`.4`) | ❌ |
+| UI state | `~/Library/Preferences/site.easonsi.nexus.plist` | `NSWindow` frame autosave (MainWindow) | ✅ (NSUserDefaults) |
+
+The split is deliberate (see SADR-015):
+- Time Machine backs up Application Support + Preferences but not Caches/Logs —
+  matches what each kind of data deserves.
+- Cache thumbnails get system-managed eviction; we don't have to write our own
+  janitor.
+- `~/Library/Logs/<bundle-id>/main.log` is where Console.app's "Reports" view
+  surfaces app-level logs by convention.
+
+Pre-v1.2.0 builds put everything under `~/.ea/nexus/`. The migration script
+[`scripts/migrate-data-v1.2.0.sh`](../../scripts/migrate-data-v1.2.0.sh) runs
+once before first launch on the new version, moves the user-critical files
+(config + db) to Application Support, drops the regenerable files (thumbnails
+get rebuilt; logs are append-only and disposable), and archives the old root
+to `~/.ea/nexus.pre-v1.2.0-bak-<timestamp>/` for verification.
+
+## Data Layout
+
+Standard macOS layout, all keyed by bundle id `site.easonsi.nexus` (resolved via
+`FileManager.url(for:in:)` — no hardcoded paths):
+
+| Kind | Location | What lives here | Backed up by Time Machine? |
+|---|---|---|---|
+| User-critical | `~/Library/Application Support/site.easonsi.nexus/` | `config.json`, `nexus.db` (+ `-wal`, `-shm`) | ✅ |
+| Regenerable | `~/Library/Caches/site.easonsi.nexus/` | `uploader-thumbnails/{id}.webp` | ❌ (system may purge under disk pressure) |
+| Logs | `~/Library/Logs/site.easonsi.nexus/` | `main.log` + 4 rotated generations (`.1`..`.4`) | ❌ |
+| UI state | `~/Library/Preferences/site.easonsi.nexus.plist` | `NSWindow` frame autosave (MainWindow) | ✅ (NSUserDefaults) |
+
+The split is deliberate (see SADR-015):
+- Time Machine backs up Application Support + Preferences but not Caches/Logs —
+  matches what each kind of data deserves.
+- Cache thumbnails get system-managed eviction; we don't have to write our own
+  janitor.
+- `~/Library/Logs/<bundle-id>/main.log` is where Console.app's "Reports" view
+  surfaces app-level logs by convention.
+
+Pre-v1.2.0 builds put everything under `~/.ea/nexus/`. The migration script
+[`scripts/migrate-data-v1.2.0.sh`](../../scripts/migrate-data-v1.2.0.sh) runs
+once before first launch on the new version, moves the user-critical files
+(config + db) to Application Support, drops the regenerable files (thumbnails
+get rebuilt; logs are append-only and disposable), and archives the old root
+to `~/.ea/nexus.pre-v1.2.0-bak-<timestamp>/` for verification.
+
 ## Persistence Layer (`Core/DataStore.swift`)
 
 Generic actor that handles debounced JSON writes:
@@ -177,11 +231,19 @@ feature owns its own typed `DataStore<T>` — no global key/value bag.
 ## Logging
 
 Two sinks:
-- `OSLog` (subsystem `site.easonsi.nexus`, categories per feature) — visible in Console.app
-- File mirror at `~/.ea/nexus/logs/main.log` for parity with the Electron build (5 MB
-  rotation, `.1` suffix on rollover)
+- **OSLog** (subsystem `site.easonsi.nexus`, categories `pomodoro` / `tracker` /
+  `uploader` / `palette` / `app` / `config`) — visible in Console.app and
+  `log show --predicate 'subsystem == "site.easonsi.nexus"' --info`. Persistence
+  is system-managed.
+- **File mirror** at `~/Library/Logs/site.easonsi.nexus/main.log`. Rotates at
+  5 MB keeping 4 generations (`.1`..`.4`) — ~25 MB total cap. Each launch writes
+  a banner line (`===== Launched Nexus vX.Y.Z (pid=...) =====`) so eyeballing a
+  single run is `tail -f` then look for the marker. Source location is rendered
+  as `<basename>:<line>` (e.g. `PomodoroService.swift:53`), not the full
+  `Nexus/Features/.../*.swift` path.
 
-`Logger.swift` provides `Logger.pomodoro`, `Logger.tracker`, etc.
+`Logger.swift` exposes `Log.pomodoro` / `Log.tracker` / etc., each with
+`.info` / `.warn` / `.error` / `.debug` methods.
 
 ## Permissions (`Core/Permissions.swift`)
 

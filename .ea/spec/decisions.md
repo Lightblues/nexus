@@ -104,29 +104,66 @@ root.
 ---
 
 ## SADR-006: Sparkle for auto-update
-**Status**: Deferred (revisit at v2)
+**Status**: Deferred. Reassess only after / together with adopting Apple Developer ID + Notarization.
 
 **Context**: The Electron build has no auto-update — users get new versions only via
 `brew upgrade --cask nexus`. That's fine for the `brew` users but loses the chance
 to nudge non-Homebrew installers.
 
-**Original decision**: Integrate Sparkle 2 with EdDSA-signed appcast at
+**Originally proposed**: Integrate Sparkle 2 with EdDSA-signed appcast at
 `https://github.com/Lightblues/nexus/releases/latest/download/appcast.xml`. Auto-check
 weekly, prompt user before downloading. The Homebrew tap continues to work as the
 primary distribution; Sparkle is a fallback for direct DMG users and a way to surface
 release notes inside the app.
 
-**Why deferred at v1.x**: Single-developer project, small user base, brew + manual
-DMG cover both audience cohorts. The marginal value of Sparkle (one-click in-app
-update for non-brew users) doesn't outweigh ~5 hours of integration + EdDSA key
-management surface area at this scale. Revisit when (a) user count grows enough that
-"go to GitHub Releases" feels like a cliff, or (b) we need to ship a security-relevant
-fix and brew cadence isn't fast enough.
+**Why deferred — the short version**
 
-**Consequence if/when adopted**: Two install paths (cask + Sparkle) must be kept in
-sync via the release pipeline. Adds ~3 MB to the bundle (Sparkle.framework). The
-EdDSA private key becomes an attack vector — must live in GitHub Secrets, never in
-the repo.
+1. The audience that benefits from Sparkle (non-brew users wanting one-click in-app
+   updates) is currently empty. All current users are on `brew upgrade --cask`.
+2. **Sparkle on top of ad-hoc-signed builds is an anti-pattern**, not a partial step
+   toward better UX:
+   - Sparkle does not interact with macOS code signing or Gatekeeper. Its EdDSA
+     signature only protects the appcast + DMG download integrity (against MitM /
+     compromised CDN); it never participates in the OS's "is this app trustworthy"
+     check.
+   - Brew currently strips the `com.apple.quarantine` xattr in its cask install path
+     (and `install-local.sh` does the same for local DMG installs). Sparkle does
+     **not** strip quarantine — it assumes the .app is properly signed and notarized.
+   - On Nexus's current ad-hoc identity (`-`), every Sparkle-pushed update would
+     trigger Gatekeeper's "Apple cannot verify the developer of Nexus" dialog on the
+     first post-update launch. That makes the Sparkle UX *worse* than `brew upgrade`,
+     not better.
+3. The actual prerequisite is **Apple Developer ID signing + Notarization** — a
+   separate decision (~$99/yr + CI changes). Once notarized, the app is trusted
+   regardless of distribution channel (brew, Sparkle, raw DMG download), and Sparkle
+   becomes worth its integration cost.
+
+**Decision tree for revisiting**:
+
+```
+Has Nexus adopted Developer ID + Notarization?
+├─ No  → Sparkle stays deferred. Don't even partially integrate it.
+└─ Yes → Has user demand shifted off brew? (non-technical users / multiple distribution channels)
+         ├─ No  → Sparkle is optional. brew alone still serves everyone.
+         └─ Yes → Adopt Sparkle 2 with EdDSA appcast. ~5h integration + key management.
+```
+
+**Common Sparkle confusions worth nailing down** (so future-us / contributors don't
+re-litigate):
+
+| Claim | Reality |
+|---|---|
+| "Sparkle's EdDSA signature makes the app trusted by macOS" | False — EdDSA signs the appcast/DMG download, not the bundle. Gatekeeper ignores it. |
+| "https on the appcast URL is sufficient for security" | False — still needs EdDSA. https + EdDSA together cover both transport and source attacks. |
+| "Sparkle can bypass Notarization since it's an in-app update" | False — Gatekeeper doesn't care how the .app got there, only whether the bundle (a) lacks the quarantine xattr or (b) passes signing+notarization. |
+| "ad-hoc signed apps can't use Sparkle" | Half-true — they technically can, but the post-update launch UX is broken. |
+
+**Consequences of the deferral**:
+
+- Release flow stays brew-only. Users update by `brew upgrade --cask nexus` (or
+  re-running `install-local.sh` for direct DMG).
+- No EdDSA key to manage. No appcast.xml to keep in sync.
+- The day we adopt Developer ID, this SADR's tree above gates the next move.
 
 ---
 
@@ -290,6 +327,62 @@ macOS Swift project — `Nexus/`, `project.yml`, `scripts/`, `README.md`,
 historical spec; `.ea/spec/swift/` remains the active spec. The
 `legacy/electron` tag is the single recovery handle for Electron code; nothing
 else points to it.
+
+---
+
+## SADR-015: Adopt standard macOS data layout
+**Status**: Accepted (v1.2.0)
+
+**Context**: Through v1.1.x, all of Nexus's data lived under `~/.ea/nexus/` —
+config, SQLite database, uploader thumbnail cache, and the file-mirrored log.
+The path was inherited from the Electron build, where it doubled as a
+mackup-friendly dotfile location. After cleanup the only remaining argument for
+`~/.ea/nexus/` was inertia: it doesn't match macOS conventions, sandbox-friendly
+APIs (`FileManager.url(for:in:)`) deliberately don't return it, and Time
+Machine's "back up Application Support, skip Caches" heuristic can't apply to a
+flat-by-kind directory.
+
+**Decision**: Use the standard system-furnished locations, all keyed by bundle
+identifier `site.easonsi.nexus`:
+
+| Kind | Path | Reasoning |
+|---|---|---|
+| User-critical | `~/Library/Application Support/site.easonsi.nexus/` | `config.json`, `nexus.db` (+ `-wal`, `-shm`) — Time Machine backs up; conceptually "the user's data" |
+| Regenerable | `~/Library/Caches/site.easonsi.nexus/` | `uploader-thumbnails/{id}.webp` — system-managed eviction, not backed up |
+| Logs | `~/Library/Logs/site.easonsi.nexus/` | `main.log` + 4 rotated generations — Console.app's "Reports" view picks them up automatically |
+| UI state | `~/Library/Preferences/site.easonsi.nexus.plist` | `NSWindow` frame autosave (already there pre-1.2.0; AppKit owns it) |
+
+`Paths.swift` resolves each via `FileManager.url(for:in:)` and appends the
+bundle id — no hardcoded `~/Library/...` strings. `LegacyMigration.swift`
+(which read the pre-Swift JSON files at app launch) is **deleted**: the
+v1.0/v1.1 import was a one-time event for the early Phase 1 user, and the
+migration to standard paths is not the app's job.
+
+**Consequences**:
+
+- **One-shot external migration**: `scripts/migrate-data-v1.2.0.sh` moves
+  `~/.ea/nexus/{config.json, nexus.db, nexus.db-wal, nexus.db-shm}` to
+  Application Support, archives the rest to `~/.ea/nexus.pre-v1.2.0-bak-<ts>/`,
+  cleans Electron-era residue from `~/Library/Application Support/nexus/` and
+  `~/Library/Logs/nexus/`. Idempotent. Symlinks (e.g. mackup chains pointing at
+  `config.json`) are preserved by `mv`.
+- **Mackup integration breaks**: any `.mackup.cfg` entry like `.ea/nexus/config.yaml`
+  no longer resolves. Re-establishing sync is an explicit user step (update
+  the mackup app config to point at `Library/Application Support/site.easonsi.nexus/config.json`,
+  recreate the symlink). Mackup integration was always a power-user setup, not
+  a default; v1.2.0 deliberately sheds it from the migration script.
+- **Sandbox-future-proof**: the standard locations are exactly the URLs that
+  `NSFileManager` returns inside the sandbox. If we ever ship through the Mac
+  App Store, the on-disk paths simply move under `~/Library/Containers/site.easonsi.nexus/Data/`
+  with the same internal structure — no path-handling code changes needed.
+- **Console.app discovery**: app logs land where macOS surfaces them by
+  default ("Reports" sidebar in Console.app). `log show --predicate 'subsystem == "site.easonsi.nexus"'`
+  also works for OSLog-side queries.
+- **Smaller `Paths.swift`**: down from 14 paths to 8. The dropped entries
+  (`dataFile`, `uploaderFile`, `archiveDir`, `trackerDir`, `archiveFile(year:)`,
+  `trackerFile(date:)`, `legacyWindowStateFile`, `cleanupLegacyFiles()`) were
+  all only used by `LegacyMigration` or referred to legacy file shapes that
+  are now in the database.
 
 ---
 

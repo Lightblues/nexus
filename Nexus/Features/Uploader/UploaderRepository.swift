@@ -12,10 +12,14 @@ final class UploaderRepository: ObservableObject {
 
     /// Cap on history rows. Match the Electron build to keep migration UX
     /// consistent across rewrites.
-    static let historyCap = 100
-    static let pathsCap = 10
+    ///
+    /// `nonisolated` so they can be referenced from inside `db.write { ... }`
+    /// closures (which are `@Sendable`). Plain `static let` on a `@MainActor`
+    /// class is implicitly main-isolated and would error in Swift 6.
+    nonisolated static let historyCap = 100
+    nonisolated static let pathsCap = 10
     /// Thumbnail edge size used for cached preview WebP/JPEGs.
-    static let thumbnailSize = 200
+    nonisolated static let thumbnailSize = 200
 
     private let db: Database
 

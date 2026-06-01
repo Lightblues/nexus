@@ -379,6 +379,14 @@ try data.write(to: target, options: .atomic)
 Apply uniformly to *every* config/data writer that might land on a tracked
 file. We did this in `Config.swift` and `CatalogMigration.swift`.
 
+> **v1.2.0 note**: config now lives at
+> `~/Library/Application Support/site.easonsi.nexus/config.json`, and
+> `migrate-data-v1.2.0.sh` `mv`s the file (preserving the symlink) into the
+> new location. The mackup `.cfg` entry that previously named
+> `.ea/nexus/config.yaml` no longer resolves; re-establishing sync is a manual
+> step. The symlink-resolution fix above remains in place — same code path,
+> just acting on a file under `Library/...` now.
+
 ### 4.3 Bundle ID continuity is sacred
 
 **Symptom (avoided)**: We considered renaming `site.easonsi.nexus` to something

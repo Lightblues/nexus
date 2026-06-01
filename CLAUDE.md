@@ -12,7 +12,7 @@ archived at the `legacy/electron` git tag.
 - **Local install**: `./scripts/install-local.sh` (build + replace `/Applications/Nexus.app`)
 - **Release**: bump `CFBundleShortVersionString` in `project.yml`, tag `nexus-vX.Y.Z`, push → CI builds DMG, creates GitHub Release, bumps Homebrew cask
 - **Bundle ID**: `site.easonsi.nexus` (frozen — Mackup + AX permission continuity)
-- **Data**: `~/.ea/nexus/`
+- **Data**: `~/Library/Application Support/site.easonsi.nexus/` (config + db); `~/Library/Caches/...` (thumbnails); `~/Library/Logs/...` (main.log). v1.2.0 migration: run `./scripts/migrate-data-v1.2.0.sh` once before first launch on the new layout. See SADR-015.
 - **Spec**: `.ea/spec/` (active spec — `spec.md` is the index). `.ea/spec/legacy-electron/` holds two preserved Electron-era files (architecture, decisions) for SADR cross-reference. Full Electron sources at the `legacy/electron` git tag.
 
 ## Coding Style
