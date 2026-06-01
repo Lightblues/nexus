@@ -31,6 +31,7 @@ intentional and documented in `decisions.md` (SADR series).
 | [decisions.md](decisions.md) | Swift-specific ADRs (SADR-001+); maps each Electron ADR to its Swift equivalent |
 | [migration.md](migration.md) | Data/config compatibility, version bridging, rollout strategy |
 | [phases.md](phases.md) | Implementation phases, exit criteria per phase |
+| [pitfalls.md](pitfalls.md) | Postmortem of traps hit during the migration: cross-Xcode CI, packaging, runtime UI, tooling. Copy these fixes before they bite the next project. |
 
 ## Quick reference
 

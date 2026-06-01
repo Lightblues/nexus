@@ -3,6 +3,10 @@
 Time estimates assume **~one developer, focused**. Each phase ends with a buildable,
 runnable artifact — no big-bang merges.
 
+> **Postmortem**: see [`pitfalls.md`](pitfalls.md) for the actual traps hit during
+> phases 1–5 (cross-Xcode CI, NSPopover/NSPanel dismiss, mackup symlinks, Edit-tool
+> duplication). Worth reading **before** starting Phase 5 on the next project.
+
 ## Phase 0 — Project scaffold (~1 day)
 
 **Output**: empty Xcode project that launches and shows a status item.
