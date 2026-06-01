@@ -71,7 +71,7 @@ struct UploaderView: View {
             adoptConfigDefaults()
             consumePendingImage()
         }
-        .onChange(of: service.pendingImage?.filename) { _ in
+        .onChange(of: service.pendingImages?.count) { _ in
             consumePendingImage()
         }
         .onChange(of: quality) { _ in invalidateActiveCompress() }
@@ -453,9 +453,9 @@ struct UploaderView: View {
     }
 
     private func consumePendingImage() {
-        if let p = service.takePending() {
-            addToBatch([(p.data, p.filename)])
-        }
+        let pending = service.takePending()
+        guard !pending.isEmpty else { return }
+        addToBatch(pending.map { ($0.data, $0.filename) })
     }
 
     private func adoptConfigDefaults() {

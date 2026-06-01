@@ -10,8 +10,9 @@ final class UploaderService: ObservableObject {
     /// Read-only signal: nil means "no GitHub credentials configured".
     @Published private(set) var isConfigured: Bool = false
     /// Set by the menu bar drag receiver; consumed by the next mount of
-    /// UploaderPopoverView. Reset to nil after consumption.
-    @Published var pendingImage: PendingImage?
+    /// UploaderPopoverView. Reset to nil after consumption. Always 1+
+    /// elements when non-nil (UploaderView treats them as a batch).
+    @Published var pendingImages: [PendingImage]?
 
     let repository: UploaderRepository
     private let config: ConfigService
@@ -124,13 +125,18 @@ final class UploaderService: ObservableObject {
     // MARK: - Pending image hand-off (used by status bar drag receiver)
 
     func setPending(_ pending: PendingImage) {
-        pendingImage = pending
+        pendingImages = [pending]
     }
 
-    /// Consume the pending image (read-once); used by UploaderPopoverView on appear.
-    func takePending() -> PendingImage? {
-        let p = pendingImage
-        pendingImage = nil
+    func setPending(_ pending: [PendingImage]) {
+        guard !pending.isEmpty else { return }
+        pendingImages = pending
+    }
+
+    /// Consume the pending images (read-once); used by UploaderView on appear.
+    func takePending() -> [PendingImage] {
+        let p = pendingImages ?? []
+        pendingImages = nil
         return p
     }
 

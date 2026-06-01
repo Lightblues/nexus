@@ -11,17 +11,20 @@ import AppKit
 ///     consuming them in `mouseDown(with:)`. The button's click handling
 ///     keeps working unchanged.
 ///
-/// On a successful drop we call `onImageDropped(data, filename)` on the main
-/// thread and the AppDelegate routes the bytes into UploaderService and opens
-/// MainWindow on the uploader route.
+/// On a successful drop we call `onImagesDropped([(data, filename)])` on the
+/// main thread and the AppDelegate routes the bytes into UploaderService.
+/// Multi-image drops mirror the in-window DropZone behavior — Finder lets
+/// users drag a multi-selection in one gesture, all of them should land in
+/// the uploader's batch.
 final class StatusItemDropView: NSView {
-    private let onImageDropped: (Data, String) -> Void
+    /// Called with the full list of dropped images, in drop order.
+    private let onImagesDropped: ([(Data, String)]) -> Void
     private var isHovered = false {
         didSet { needsDisplay = true }
     }
 
-    init(frame: NSRect, onImageDropped: @escaping (Data, String) -> Void) {
-        self.onImageDropped = onImageDropped
+    init(frame: NSRect, onImagesDropped: @escaping ([(Data, String)]) -> Void) {
+        self.onImagesDropped = onImagesDropped
         super.init(frame: frame)
         registerForDraggedTypes([.fileURL, .png, .tiff])
     }
@@ -56,19 +59,28 @@ final class StatusItemDropView: NSView {
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
         defer { isHovered = false }
         let pb = sender.draggingPasteboard
-        // Prefer file URL — gives us the original filename.
-        if let urls = pb.readObjects(forClasses: [NSURL.self], options: nil) as? [URL],
-           let url = urls.first(where: { isImageURL($0) }) {
-            if let data = try? Data(contentsOf: url) {
-                let name = url.lastPathComponent
-                DispatchQueue.main.async { self.onImageDropped(data, name) }
-                return true
+
+        // Multi-file drop from Finder: collect every image URL in the drop,
+        // not just the first. Drop order is preserved because
+        // `readObjects(forClasses:)` returns the array in pasteboard order.
+        if let urls = pb.readObjects(forClasses: [NSURL.self], options: nil) as? [URL] {
+            let images = urls.filter { isImageURL($0) }
+            if !images.isEmpty {
+                let payloads: [(Data, String)] = images.compactMap { url in
+                    guard let data = try? Data(contentsOf: url) else { return nil }
+                    return (data, url.lastPathComponent)
+                }
+                if !payloads.isEmpty {
+                    DispatchQueue.main.async { self.onImagesDropped(payloads) }
+                    return true
+                }
             }
         }
-        // Fallback: raw bytes from a browser/screenshot pasteboard.
+        // Fallback: raw bytes from a browser/screenshot pasteboard. Single
+        // image — pasteboard image data is one frame, no multi-image form.
         if let data = pb.data(forType: .png) {
             DispatchQueue.main.async {
-                self.onImageDropped(data, "dropped-\(Self.timestamp()).png")
+                self.onImagesDropped([(data, "dropped-\(Self.timestamp()).png")])
             }
             return true
         }
@@ -76,7 +88,7 @@ final class StatusItemDropView: NSView {
            let rep = NSBitmapImageRep(data: tiff),
            let png = rep.representation(using: .png, properties: [:]) {
             DispatchQueue.main.async {
-                self.onImageDropped(png, "dropped-\(Self.timestamp()).png")
+                self.onImagesDropped([(png, "dropped-\(Self.timestamp()).png")])
             }
             return true
         }

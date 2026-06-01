@@ -68,8 +68,9 @@ UI 入口三处(同 Electron)
 2. "open in browser" 打开 jsdelivr 没问题, 可以保留; 不过我之前的预期是打开 github [url](https://github.com/Lightblues/assets/blob/main/upload/erudite/library.jpg)
 btw, 现在支持多图上传吗?
 
-## multi pic upload
+## feat: multi pic upload
 测试通过! 关于多图上传, 你评估一下这个需求合理吗? 
 - 最简化 setting: 只支持同一文件夹中多图的拖拽上传, 最多 10 张; compact 配置应用到全部图片. 这样情况下, 实现复杂度如何?
 
 两个问题: 1. 拖拽到 menubar 只显示了第一张图片 (文件名是原本的, 正确), 预期两个上传入口的逻辑是一样的; 2. 拖拽到上传窗口的话, 显示的 "filename" 变成了 "dropped-20260601-173917-0" 我希望保留原本文件名
+我发现拖拽到 menubar 的可以识别到文件名, 但直接拖拽到 uploader tab 仍然会被解析成文件名 `dropped-20260601-174924-0.png` -- 这两个逻辑不应该一致吗? 为啥有差异

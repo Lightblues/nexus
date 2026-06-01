@@ -60,8 +60,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Overlay an invisible view that receives image drops while
             // forwarding clicks to the button (hitTest returns nil). Drag an
             // image onto the icon → uploader opens with the image preloaded.
-            let overlay = StatusItemDropView(frame: button.bounds) { [weak self] data, name in
-                self?.handleStatusItemDrop(data: data, name: name)
+            // Multi-file drops route through as a batch.
+            let overlay = StatusItemDropView(frame: button.bounds) { [weak self] payloads in
+                self?.handleStatusItemDrop(payloads: payloads)
             }
             overlay.autoresizingMask = [.width, .height]
             button.addSubview(overlay)
@@ -69,12 +70,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = item
     }
 
-    /// Called from StatusItemDropView when user drops an image on the icon.
-    /// Stash as pending → open MainWindow on the uploader route. The view's
-    /// onAppear/onChange consumes the pending image and runs compression.
-    private func handleStatusItemDrop(data: Data, name: String) {
-        Log.uploader.info("dropped on icon: \(name) (\(data.count) bytes)")
-        environment.uploader.setPending(PendingImage(data: data, filename: name))
+    /// Called from StatusItemDropView when user drops one or more images on
+    /// the menu bar icon. We stash them all as pending so the uploader view
+    /// (which we open immediately afterwards) picks them up as a batch.
+    private func handleStatusItemDrop(payloads: [(Data, String)]) {
+        guard !payloads.isEmpty else { return }
+        Log.uploader.info("dropped on icon: \(payloads.count) image\(payloads.count == 1 ? "" : "s")")
+        let pendings = payloads.map { PendingImage(data: $0.0, filename: $0.1) }
+        environment.uploader.setPending(pendings)
         environment.mainWindow.show(route: .uploader)
     }
 
