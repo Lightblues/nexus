@@ -120,8 +120,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             closePopover()
         } else {
             pop.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-            // Activate so SwiftUI text fields in the editor sheet can take key focus.
-            NSApp.activate(ignoringOtherApps: true)
+            // Intentionally do NOT call `NSApp.activate(ignoringOtherApps: true)` here.
+            // The popover is a status-bar attachment and should behave like a system
+            // menubar item: appear without stealing focus from the user's current app
+            // (e.g. VSCode) and without dragging Nexus's MainWindow z-order to the
+            // front. SwiftUI buttons inside the popover work fine without app
+            // activation. The only place we *do* need activation is when the user
+            // opens the EditSessionModal sheet (TextFields need key focus); that
+            // call lives in PomodoroPopoverView's edit button action.
             installClickOutsideMonitor()
         }
     }
