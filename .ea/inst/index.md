@@ -23,7 +23,7 @@
     - feat: 将 github+jsdelivr 作为图床使用; 支持自定义文件名&路径
     - feat: 上传时自动压缩; 支持 jpg & png
 - palette
-    - [x] 全局快捷键 (palette): 类似 Raycast. 1} 使用 Ctl+Space 作为激活键; 2} UI 参考 Raycast 的 command palette; 3) 功能: 目前先作为
+    - [x] 全局快捷键 (palette): 类似 Raycast. 1} 使用 Ctl+Space 作为激活键; 2} UI 参考 Raycast 的 command palette; 3) 功能: 作为各个 url schema 入口
 - 迁移到 Swift
     - [x] Pomodoro
     - [x] Tracker
