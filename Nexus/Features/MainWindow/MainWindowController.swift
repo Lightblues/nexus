@@ -16,6 +16,16 @@ final class MainWindowController: NSObject {
     }
 
     func show() {
+        // If bootstrap hasn't attached the environment yet (rare race window —
+        // SwiftUI's Settings scene can dispatch a "Show Settings" command
+        // before applicationDidFinishLaunching's bootstrap Task awaits its
+        // first hop), defer the show until next runloop tick. By then
+        // AppEnvironment.bootstrap() has run its synchronous prefix
+        // (which now includes the attach() call).
+        guard environment != nil else {
+            DispatchQueue.main.async { [weak self] in self?.show() }
+            return
+        }
         if window == nil {
             window = makeWindow()
         }

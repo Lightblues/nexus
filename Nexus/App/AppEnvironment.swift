@@ -47,6 +47,15 @@ final class AppEnvironment: ObservableObject {
 
     /// Initial async work that needs `await` — called from AppDelegate.applicationDidFinishLaunching.
     func bootstrap() async {
+        // Wire the singletons that own AppEnvironment-back-references FIRST,
+        // before any `await`. SwiftUI may dispatch system-level commands
+        // (e.g. macOS's "Show Settings" → SettingsTrampoline → mainWindow.show())
+        // as soon as the app finishes launching — that can fire before the
+        // bootstrap awaits return, so anything those code paths touch must
+        // be ready synchronously up front.
+        mainWindow.attach(environment: self)
+        palette.attach(environment: self)
+
         config.bootstrap()
         notifier.setup()
 
@@ -59,9 +68,6 @@ final class AppEnvironment: ObservableObject {
         await trackerRepository.bootstrap()
         await tracker.bootstrap()
         await uploader.bootstrap()
-
-        mainWindow.attach(environment: self)
-        palette.attach(environment: self)
 
         // Register palette + URL-scheme commands. Order doesn't matter; each
         // call is idempotent (registry replaces by id).
