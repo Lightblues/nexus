@@ -83,7 +83,10 @@ final class UploaderService: ObservableObject {
             format: outputFormat,
             path: path.isEmpty ? nil : path,
             cdnUrl: outcome.cdnUrl,
-            sha: outcome.sha
+            sha: outcome.sha,
+            githubOwner: cfg.github.owner,
+            githubRepo: cfg.github.repo,
+            githubBranch: cfg.github.branch
         )
         // Cache thumbnail when configured. Use the *compressed* bytes — we
         // already paid to encode them, and the thumbnail of a near-final

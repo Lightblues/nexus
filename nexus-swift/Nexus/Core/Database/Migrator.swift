@@ -100,6 +100,19 @@ enum Migrator {
             }
         }
 
+        m.registerMigration("v4_uploader_repo_meta") { db in
+            // Track which GitHub repo each upload landed in, so we can build
+            // the "Open in GitHub" URL for old rows even after the user has
+            // re-pointed Settings at a different repo. Old rows pre-v4 will
+            // have NULLs here; the UI hides the GitHub link when these are
+            // missing, falling back to "Open CDN URL only".
+            try db.alter(table: "upload_history") { t in
+                t.add(column: "github_owner", .text)
+                t.add(column: "github_repo", .text)
+                t.add(column: "github_branch", .text)
+            }
+        }
+
         return m
     }
 }

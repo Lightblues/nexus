@@ -95,7 +95,8 @@ final class UploaderRepository: ObservableObject {
     private nonisolated static func fetchHistory(_ db: GRDB.Database) throws -> [UploadRecord] {
         let rows = try Row.fetchAll(db, sql: """
             SELECT id, filename, original_name, timestamp, original_size, compressed_size,
-                   width, height, format, path, cdn_url, sha
+                   width, height, format, path, cdn_url, sha,
+                   github_owner, github_repo, github_branch
               FROM upload_history
              ORDER BY timestamp DESC
         """)
@@ -114,8 +115,9 @@ final class UploaderRepository: ObservableObject {
         try db.execute(sql: """
             INSERT OR REPLACE INTO upload_history
               (id, filename, original_name, timestamp, original_size, compressed_size,
-               width, height, format, path, cdn_url, sha)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               width, height, format, path, cdn_url, sha,
+               github_owner, github_repo, github_branch)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, arguments: [
             record.id,
             record.filename,
@@ -128,7 +130,10 @@ final class UploaderRepository: ObservableObject {
             record.format.rawValue,
             record.path,
             record.cdnUrl,
-            record.sha
+            record.sha,
+            record.githubOwner,
+            record.githubRepo,
+            record.githubBranch
         ])
     }
 
@@ -209,7 +214,10 @@ final class UploaderRepository: ObservableObject {
             format: format,
             path: row["path"] as String?,
             cdnUrl: cdnUrl,
-            sha: sha
+            sha: sha,
+            githubOwner: row["github_owner"] as String?,
+            githubRepo: row["github_repo"] as String?,
+            githubBranch: row["github_branch"] as String?
         )
     }
 }

@@ -51,6 +51,28 @@ struct UploadRecord: Identifiable, Equatable {
     let path: String?              // remote folder
     let cdnUrl: String
     let sha: String
+    /// GitHub owner/repo/branch this upload landed in, captured at upload
+    /// time. Lets us build the GitHub blob URL even after the user has
+    /// re-pointed Settings at a different repo. Nil for v3-era rows.
+    let githubOwner: String?
+    let githubRepo: String?
+    let githubBranch: String?
+
+    /// `https://github.com/{owner}/{repo}/blob/{branch}/{path}/{filename}`,
+    /// or nil if any of the github_* columns is missing.
+    var githubURL: URL? {
+        guard let owner = githubOwner, !owner.isEmpty,
+              let repo = githubRepo, !repo.isEmpty,
+              let branch = githubBranch, !branch.isEmpty
+        else { return nil }
+        let folder = path.flatMap { $0.isEmpty ? nil : $0 }
+        let fullPath = folder.map { "\($0)/\(filename)" } ?? filename
+        let encoded = fullPath
+            .split(separator: "/")
+            .map { $0.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? String($0) }
+            .joined(separator: "/")
+        return URL(string: "https://github.com/\(owner)/\(repo)/blob/\(branch)/\(encoded)")
+    }
 }
 
 /// Outcome of a GitHub PUT.
