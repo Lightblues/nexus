@@ -55,6 +55,7 @@ targets:
         CFBundleVersion: "1"
         CFBundleIdentifier: site.easonsi.nexus
         CFBundlePackageType: APPL
+        LSApplicationCategoryType: public.app-category.utilities
         LSUIElement: true
         LSMinimumSystemVersion: "13.0"
         NSHumanReadableCopyright: "© 2026 Eason"

@@ -111,8 +111,11 @@ private final class FileLogSink: @unchecked Sendable {
         guard let data = string.data(using: .utf8) else { return }
         if let handle = try? FileHandle(forWritingTo: url) {
             defer { try? handle.close() }
-            try? handle.seekToEnd()
-            try? handle.write(contentsOf: data)
+            // Discard seekToEnd / write errors explicitly — the only meaningful
+            // failure here is "log volume disappeared", and we don't have a
+            // recovery path beyond letting later writes try again.
+            _ = try? handle.seekToEnd()
+            _ = try? handle.write(contentsOf: data)
         } else {
             try? data.write(to: url)
         }

@@ -104,29 +104,66 @@ root.
 ---
 
 ## SADR-006: Sparkle for auto-update
-**Status**: Deferred (revisit at v2)
+**Status**: Deferred. Reassess only after / together with adopting Apple Developer ID + Notarization.
 
 **Context**: The Electron build has no auto-update — users get new versions only via
 `brew upgrade --cask nexus`. That's fine for the `brew` users but loses the chance
 to nudge non-Homebrew installers.
 
-**Original decision**: Integrate Sparkle 2 with EdDSA-signed appcast at
+**Originally proposed**: Integrate Sparkle 2 with EdDSA-signed appcast at
 `https://github.com/Lightblues/nexus/releases/latest/download/appcast.xml`. Auto-check
 weekly, prompt user before downloading. The Homebrew tap continues to work as the
 primary distribution; Sparkle is a fallback for direct DMG users and a way to surface
 release notes inside the app.
 
-**Why deferred at v1.x**: Single-developer project, small user base, brew + manual
-DMG cover both audience cohorts. The marginal value of Sparkle (one-click in-app
-update for non-brew users) doesn't outweigh ~5 hours of integration + EdDSA key
-management surface area at this scale. Revisit when (a) user count grows enough that
-"go to GitHub Releases" feels like a cliff, or (b) we need to ship a security-relevant
-fix and brew cadence isn't fast enough.
+**Why deferred — the short version**
 
-**Consequence if/when adopted**: Two install paths (cask + Sparkle) must be kept in
-sync via the release pipeline. Adds ~3 MB to the bundle (Sparkle.framework). The
-EdDSA private key becomes an attack vector — must live in GitHub Secrets, never in
-the repo.
+1. The audience that benefits from Sparkle (non-brew users wanting one-click in-app
+   updates) is currently empty. All current users are on `brew upgrade --cask`.
+2. **Sparkle on top of ad-hoc-signed builds is an anti-pattern**, not a partial step
+   toward better UX:
+   - Sparkle does not interact with macOS code signing or Gatekeeper. Its EdDSA
+     signature only protects the appcast + DMG download integrity (against MitM /
+     compromised CDN); it never participates in the OS's "is this app trustworthy"
+     check.
+   - Brew currently strips the `com.apple.quarantine` xattr in its cask install path
+     (and `install-local.sh` does the same for local DMG installs). Sparkle does
+     **not** strip quarantine — it assumes the .app is properly signed and notarized.
+   - On Nexus's current ad-hoc identity (`-`), every Sparkle-pushed update would
+     trigger Gatekeeper's "Apple cannot verify the developer of Nexus" dialog on the
+     first post-update launch. That makes the Sparkle UX *worse* than `brew upgrade`,
+     not better.
+3. The actual prerequisite is **Apple Developer ID signing + Notarization** — a
+   separate decision (~$99/yr + CI changes). Once notarized, the app is trusted
+   regardless of distribution channel (brew, Sparkle, raw DMG download), and Sparkle
+   becomes worth its integration cost.
+
+**Decision tree for revisiting**:
+
+```
+Has Nexus adopted Developer ID + Notarization?
+├─ No  → Sparkle stays deferred. Don't even partially integrate it.
+└─ Yes → Has user demand shifted off brew? (non-technical users / multiple distribution channels)
+         ├─ No  → Sparkle is optional. brew alone still serves everyone.
+         └─ Yes → Adopt Sparkle 2 with EdDSA appcast. ~5h integration + key management.
+```
+
+**Common Sparkle confusions worth nailing down** (so future-us / contributors don't
+re-litigate):
+
+| Claim | Reality |
+|---|---|
+| "Sparkle's EdDSA signature makes the app trusted by macOS" | False — EdDSA signs the appcast/DMG download, not the bundle. Gatekeeper ignores it. |
+| "https on the appcast URL is sufficient for security" | False — still needs EdDSA. https + EdDSA together cover both transport and source attacks. |
+| "Sparkle can bypass Notarization since it's an in-app update" | False — Gatekeeper doesn't care how the .app got there, only whether the bundle (a) lacks the quarantine xattr or (b) passes signing+notarization. |
+| "ad-hoc signed apps can't use Sparkle" | Half-true — they technically can, but the post-update launch UX is broken. |
+
+**Consequences of the deferral**:
+
+- Release flow stays brew-only. Users update by `brew upgrade --cask nexus` (or
+  re-running `install-local.sh` for direct DMG).
+- No EdDSA key to manage. No appcast.xml to keep in sync.
+- The day we adopt Developer ID, this SADR's tree above gates the next move.
 
 ---
 
