@@ -13,6 +13,8 @@ final class AppEnvironment: ObservableObject {
     let pomodoro: PomodoroService
     let trackerRepository: TrackerRepository
     let tracker: TrackerService
+    let uploaderRepository: UploaderRepository
+    let uploader: UploaderService
     let notifier: NotificationService
     let mainWindow: MainWindowController
     let palette: PaletteController
@@ -29,13 +31,16 @@ final class AppEnvironment: ObservableObject {
         }
         let pomodoroRepository = PomodoroRepository(database: database)
         let trackerRepository = TrackerRepository(database: database)
+        let uploaderRepository = UploaderRepository(database: database)
         self.config = config
         self.database = database
         self.notifier = notifier
         self.pomodoroRepository = pomodoroRepository
         self.trackerRepository = trackerRepository
+        self.uploaderRepository = uploaderRepository
         self.pomodoro = PomodoroService(repository: pomodoroRepository, config: config, notifier: notifier)
         self.tracker = TrackerService(repository: trackerRepository, config: config)
+        self.uploader = UploaderService(repository: uploaderRepository, config: config)
         self.mainWindow = MainWindowController()
         self.palette = PaletteController()
     }
@@ -57,6 +62,7 @@ final class AppEnvironment: ObservableObject {
 
         await trackerRepository.bootstrap()
         await tracker.bootstrap()
+        await uploader.bootstrap()
 
         mainWindow.attach(environment: self)
         palette.attach(environment: self)
@@ -65,6 +71,7 @@ final class AppEnvironment: ObservableObject {
         // call is idempotent (registry replaces by id).
         PomodoroCommands.register(service: pomodoro)
         TrackerCommands.register(service: tracker, mainWindow: mainWindow)
+        UploaderCommands.register(service: uploader, mainWindow: mainWindow)
         WindowCommands.register(mainWindow: mainWindow)
         AppCommands.register()
 

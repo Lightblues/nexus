@@ -10,22 +10,32 @@ enum PomodoroCommands {
 
         registry.register(Command(
             id: "pomodoro.toggle",
-            title: "Pomodoro: Toggle",
+            title: { [weak service] in
+                // Title tracks the action the user will trigger next,
+                // so 'Pomodoro: Pause' shows up while running etc.
+                guard let service else { return "Pomodoro: Toggle" }
+                switch service.state {
+                case .idle:                 return "Pomodoro: Start Focus"
+                case .running:              return "Pomodoro: Pause"
+                case .paused:               return "Pomodoro: Resume"
+                case .finished:             return "Pomodoro: Start Next"
+                }
+            },
             group: g,
-            keywords: ["focus", "start", "pause"],
+            keywords: ["focus", "start", "pause", "resume", "toggle"],
             when: { true },
             subtitle: { [weak service] in
                 guard let service else { return nil }
                 switch service.state {
                 case .idle:
-                    return "idle · click to start"
+                    return "idle · ↵ to start"
                 case .running(_, _, _):
-                    return "running · \(PomodoroService.formatMMSS(service.remaining)) · click to pause"
+                    return "running · \(PomodoroService.formatMMSS(service.remaining))"
                 case .paused(_, let elapsed, let total):
                     let remain = max(0, total - elapsed)
-                    return "paused · \(PomodoroService.formatMMSS(remain)) · click to resume"
+                    return "paused · \(PomodoroService.formatMMSS(remain))"
                 case .finished:
-                    return "finished · click to start next"
+                    return "finished · ↵ to start next"
                 }
             },
             run: { [weak service] in

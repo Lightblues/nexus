@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct PomodoroPopoverView: View {
@@ -71,7 +72,14 @@ struct PomodoroPopoverView: View {
     }
 
     private var sessionInfoCard: some View {
-        Button(action: { showEditor = true }) {
+        Button(action: {
+            // Activate Nexus so the sheet's TextFields can become first responder.
+            // We do this here (and only here) instead of when the popover opens,
+            // so a plain "click menubar icon → see status" interaction does NOT
+            // steal focus from the user's current app or yank MainWindow forward.
+            NSApp.activate(ignoringOtherApps: true)
+            showEditor = true
+        }) {
             HStack(spacing: 6) {
                 Text(pomodoro.draftMetadata.project ?? "default")
                     .font(.system(size: 11, weight: .medium))

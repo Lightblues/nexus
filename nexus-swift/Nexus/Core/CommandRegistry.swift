@@ -4,11 +4,13 @@ import Foundation
 /// and the `nexus://command/<id>` handler — registry is read-only by both
 /// consumers (mirrors Electron ADR-009).
 ///
-/// Subtitle and `when` are closures so they reflect live state without re-registration:
-///   pomodoro.toggle's subtitle reads PomodoroService.remaining each call.
+/// `title`, `subtitle`, and `when` are all closures so they reflect live state
+/// without re-registration. Examples:
+///   pomodoro.toggle's title  reads PomodoroService.state to show "Pause" vs "Resume"
+///   pomodoro.toggle's subtitle reads .remaining each call
 struct Command: Identifiable {
     let id: String                          // e.g. "pomodoro.toggle"
-    let title: String
+    let title: @MainActor () -> String
     let group: String?
     let keywords: [String]
     let dangerous: Bool
@@ -16,8 +18,29 @@ struct Command: Identifiable {
     let subtitle: @MainActor () -> String?
     let run: @MainActor () async -> Void
 
+    /// Static-title convenience init — most commands have a fixed label.
     init(id: String,
          title: String,
+         group: String? = nil,
+         keywords: [String] = [],
+         dangerous: Bool = false,
+         when: @escaping @MainActor () -> Bool = { true },
+         subtitle: @escaping @MainActor () -> String? = { nil },
+         run: @escaping @MainActor () async -> Void) {
+        self.init(id: id,
+                  title: { title },
+                  group: group,
+                  keywords: keywords,
+                  dangerous: dangerous,
+                  when: when,
+                  subtitle: subtitle,
+                  run: run)
+    }
+
+    /// Dynamic-title init — for commands whose label depends on live state
+    /// (e.g. a "Pause / Resume" toggle whose label reflects the current state).
+    init(id: String,
+         title: @escaping @MainActor () -> String,
          group: String? = nil,
          keywords: [String] = [],
          dangerous: Bool = false,

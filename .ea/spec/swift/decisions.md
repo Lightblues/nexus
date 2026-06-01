@@ -247,3 +247,12 @@ block. Single sha256 to track.
 | ADR-011 (Ad-hoc codesign via electron-builder) | **Replaced** | Single binary; `xcodebuild` ad-hoc signing handles it correctly. The "deep / inside-out" pitfall doesn't apply |
 | ADR-012 (Homebrew tap) | **Preserved** | Same tap, simpler cask (no per-arch block per SADR-012) |
 | ADR-013 (Palette as panel) | **Preserved** | NSPanel `nonactivatingPanel` (SADR-011) |
+
+---
+
+## See also
+
+[`pitfalls.md`](pitfalls.md) — postmortem of traps the *implementations* of these
+decisions hit. Each pitfall entry is keyed to the decision (or omission) that
+caused it; if you adopt one of these SADRs in a new project, read the
+corresponding pitfall first.

@@ -56,8 +56,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.target = self
             button.action = #selector(handleStatusButtonClick(_:))
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+
+            // Overlay an invisible view that receives image drops while
+            // forwarding clicks to the button (hitTest returns nil). Drag an
+            // image onto the icon → uploader opens with the image preloaded.
+            // Multi-file drops route through as a batch.
+            let overlay = StatusItemDropView(frame: button.bounds) { [weak self] payloads in
+                self?.handleStatusItemDrop(payloads: payloads)
+            }
+            overlay.autoresizingMask = [.width, .height]
+            button.addSubview(overlay)
         }
         statusItem = item
+    }
+
+    /// Called from StatusItemDropView when user drops one or more images on
+    /// the menu bar icon. We stash them all as pending so the uploader view
+    /// (which we open immediately afterwards) picks them up as a batch.
+    private func handleStatusItemDrop(payloads: [(Data, String)]) {
+        guard !payloads.isEmpty else { return }
+        Log.uploader.info("dropped on icon: \(payloads.count) image\(payloads.count == 1 ? "" : "s")")
+        let pendings = payloads.map { PendingImage(data: $0.0, filename: $0.1) }
+        environment.uploader.setPending(pendings)
+        environment.mainWindow.show(route: .uploader)
     }
 
     @objc private func handleStatusButtonClick(_ sender: NSStatusBarButton) {
@@ -120,8 +141,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             closePopover()
         } else {
             pop.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-            // Activate so SwiftUI text fields in the editor sheet can take key focus.
-            NSApp.activate(ignoringOtherApps: true)
+            // Intentionally do NOT call `NSApp.activate(ignoringOtherApps: true)` here.
+            // The popover is a status-bar attachment and should behave like a system
+            // menubar item: appear without stealing focus from the user's current app
+            // (e.g. VSCode) and without dragging Nexus's MainWindow z-order to the
+            // front. SwiftUI buttons inside the popover work fine without app
+            // activation. The only place we *do* need activation is when the user
+            // opens the EditSessionModal sheet (TextFields need key focus); that
+            // call lives in PomodoroPopoverView's edit button action.
             installClickOutsideMonitor()
         }
     }

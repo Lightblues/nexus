@@ -50,6 +50,8 @@ final class MainWindowController: NSObject {
             .environmentObject(env.pomodoroRepository)
             .environmentObject(env.trackerRepository)
             .environmentObject(env.tracker)
+            .environmentObject(env.uploader)
+            .environmentObject(env.uploaderRepository)
             .environmentObject(routeRequest)
             .environmentObject(routeRequest)
         let host = NSHostingController(rootView: root)

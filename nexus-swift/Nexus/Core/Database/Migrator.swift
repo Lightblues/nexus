@@ -71,6 +71,48 @@ enum Migrator {
             }
         }
 
+        m.registerMigration("v3_uploader") { db in
+            // Each upload's metadata. `id` is a UUID generated on insert.
+            // `timestamp` is unix epoch milliseconds — finer than seconds so
+            // multiple uploads in the same second sort deterministically.
+            try db.create(table: "upload_history") { t in
+                t.primaryKey("id", .text).notNull()
+                t.column("filename", .text).notNull()
+                t.column("original_name", .text).notNull()
+                t.column("timestamp", .integer).notNull()
+                t.column("original_size", .integer).notNull()
+                t.column("compressed_size", .integer).notNull()
+                t.column("width", .integer).notNull()
+                t.column("height", .integer).notNull()
+                t.column("format", .text).notNull()       // png | jpeg | webp | gif
+                t.column("path", .text)                   // remote folder, may be empty
+                t.column("cdn_url", .text).notNull()
+                t.column("sha", .text).notNull()
+            }
+            try db.create(indexOn: "upload_history", columns: ["timestamp"])
+
+            // Folders the user has uploaded into recently (for autocomplete).
+            // PK on the path so it's idempotent on re-use; `last_used` lets us
+            // sort recent first.
+            try db.create(table: "upload_paths") { t in
+                t.primaryKey("path", .text).notNull()
+                t.column("last_used", .integer).notNull()
+            }
+        }
+
+        m.registerMigration("v4_uploader_repo_meta") { db in
+            // Track which GitHub repo each upload landed in, so we can build
+            // the "Open in GitHub" URL for old rows even after the user has
+            // re-pointed Settings at a different repo. Old rows pre-v4 will
+            // have NULLs here; the UI hides the GitHub link when these are
+            // missing, falling back to "Open CDN URL only".
+            try db.alter(table: "upload_history") { t in
+                t.add(column: "github_owner", .text)
+                t.add(column: "github_repo", .text)
+                t.add(column: "github_branch", .text)
+            }
+        }
+
         return m
     }
 }
