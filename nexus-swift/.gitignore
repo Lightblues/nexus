@@ -17,7 +17,6 @@ Package.resolved
 *.dSYM.zip
 *.dmg
 dist/
-dist/
 
 # macOS
 .DS_Store
