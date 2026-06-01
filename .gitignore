@@ -13,18 +13,12 @@ Nexus.xcodeproj/
 .swiftpm/
 Package.resolved
 
-# Build outputs
-build/archive/
-build/export/
-build/dmg-stage/
+# Build outputs — build/ is build-mac.sh's staging dir (archive/, export/,
+# dmg-stage/). Nothing in here is tracked anymore (the icon source moved to
+# Resources/icon-source.png).
+build/
 *.app
 *.dSYM
 *.dSYM.zip
 *.dmg
 dist/
-
-# build/ also holds tracked source assets (icon.png). The user's global
-# gitignore excludes `build/` wholesale; re-include only the assets we ship,
-# *not* the build subdirectories above (which must stay ignored).
-!build/
-!build/icon.png
