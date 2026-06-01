@@ -151,6 +151,12 @@ parity with the most-used Electron path.
   (≥1.1).
 - Archive Electron source on `legacy/electron` branch + tag.
 
+**Status**: ✅ Complete (post-v1.1.0). Electron sources removed from working
+tree, preserved at the `legacy/electron` annotated tag (points to `c73e496`).
+`nexus-swift/*` hoisted to repository root. See SADR-014 for the rationale and
+mechanics of the cleanup. Sparkle (originally listed as Phase 5 / SADR-006) is
+deferred to v2 — see updated SADR-006.
+
 ---
 
 ## Total: ~4–5 weeks

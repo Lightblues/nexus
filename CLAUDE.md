@@ -1,25 +1,31 @@
 # nexus
 
-macOS menu bar toolkit — Pomodoro timer, image uploader, time tracker.
+macOS menu bar toolkit — Pomodoro timer, image uploader, time tracker, command palette.
+
+Native AppKit + SwiftUI single-binary app. The Electron implementation is
+archived at the `legacy/electron` git tag.
 
 ## Quick Reference
 - **Install**: `brew install --cask lightblues/tap/nexus`
-- **Dev**: `pnpm dev`
-- **Build**: `pnpm build:mac` → `.dmg` installer
-- **Release**: tag `nexus-vX.Y.Z` → push → CI builds DMG + creates GitHub Release + bumps Homebrew cask
-- **Bundle ID**: `site.easonsi.nexus`
+- **Dev**: `xcodegen generate && open Nexus.xcodeproj` → ⌘R
+- **Build DMG**: `./scripts/build-mac.sh` → `dist/Nexus-<version>.dmg`
+- **Local install**: `./scripts/install-local.sh` (build + replace `/Applications/Nexus.app`)
+- **Release**: bump `CFBundleShortVersionString` in `project.yml`, tag `nexus-vX.Y.Z`, push → CI builds DMG, creates GitHub Release, bumps Homebrew cask
+- **Bundle ID**: `site.easonsi.nexus` (frozen — Mackup + AX permission continuity)
 - **Data**: `~/.ea/nexus/`
-- **Spec**: `.ea/spec/` (spec.md → architecture, pomodoro, tracker, uploader, palette, decisions, changelog)
+- **Spec**: `.ea/spec/swift/` (active spec). `.ea/spec/*.md` at the top level is the Electron-era historical spec, kept for reference.
 
 ## Coding Style
 - Compact and type-hinted
-- Minimal docstrings (for public methods with complex logic only)
+- Minimal docstrings (only for public methods with non-obvious logic)
 - Simple and clear, avoid over-engineering
 - Language: English
 
-## TypeScript Environment
-- Package manager: `pnpm`
-- Run scripts via `pnpm <script>`
+## Swift Environment
+- Project generator: **XcodeGen** (`project.yml` → `Nexus.xcodeproj`, gitignored)
+- Min macOS: 13.0 (SwiftUI Charts, `MenuBarExtra` cohort)
+- Package manager: **SwiftPM** (deps declared in `project.yml`: GRDB)
+- Swift mode: 5.9, strict concurrency `minimal` (Xcode 15 CI compat)
 
 ## Git
 - NEVER use `git commit` directly — code must be reviewed first

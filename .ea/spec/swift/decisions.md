@@ -104,21 +104,29 @@ root.
 ---
 
 ## SADR-006: Sparkle for auto-update
-**Status**: Accepted
+**Status**: Deferred (revisit at v2)
 
 **Context**: The Electron build has no auto-update — users get new versions only via
 `brew upgrade --cask nexus`. That's fine for the `brew` users but loses the chance
 to nudge non-Homebrew installers.
 
-**Decision**: Integrate Sparkle 2 with EdDSA-signed appcast at
+**Original decision**: Integrate Sparkle 2 with EdDSA-signed appcast at
 `https://github.com/Lightblues/nexus/releases/latest/download/appcast.xml`. Auto-check
 weekly, prompt user before downloading. The Homebrew tap continues to work as the
 primary distribution; Sparkle is a fallback for direct DMG users and a way to surface
 release notes inside the app.
 
-**Consequence**: Two install paths (cask + Sparkle) — both must be kept in sync via
-the release pipeline. Adds ~3 MB to the bundle (Sparkle.framework). Worth it for
-DX and the ability to ship security fixes outside `brew upgrade` cadence.
+**Why deferred at v1.x**: Single-developer project, small user base, brew + manual
+DMG cover both audience cohorts. The marginal value of Sparkle (one-click in-app
+update for non-brew users) doesn't outweigh ~5 hours of integration + EdDSA key
+management surface area at this scale. Revisit when (a) user count grows enough that
+"go to GitHub Releases" feels like a cliff, or (b) we need to ship a security-relevant
+fix and brew cadence isn't fast enough.
+
+**Consequence if/when adopted**: Two install paths (cask + Sparkle) must be kept in
+sync via the release pipeline. Adds ~3 MB to the bundle (Sparkle.framework). The
+EdDSA private key becomes an attack vector — must live in GitHub Secrets, never in
+the repo.
 
 ---
 
@@ -227,6 +235,61 @@ block. Single sha256 to track.
 **Consequence**: One artifact in the release. The CI matrix shrinks from
 `{arm64, x64}` to a single `macos-latest` job. Bundle size up from ~10 MB to ~13 MB
 (both arches), still 95%+ smaller than Electron.
+
+---
+
+## SADR-013: Drop Dashboard view (Electron `Dashboard.tsx`)
+**Status**: Accepted
+
+**Context**: The Electron build has a `Dashboard.tsx` (39 lines, 4 emoji
+cards: 🍅 Pomodoro / 🖼️ Uploader / 📝 Notes / ⚙️ Settings). It serves as the
+default landing page of `MainWindow` because the hash router needs *something*
+to show on `#/`. Functionally it's a feature launcher, not a dashboard — there
+is no aggregate today-view data on it.
+
+**Decision**: Don't port. The Swift main window already has three superior
+entry surfaces:
+- **Sidebar**: always-visible list (Stats / Tracker / Uploader / Settings),
+  zero clicks to switch
+- **Menu bar popover**: Pomodoro is one click away from anywhere in the OS
+- **Command palette (⌘K)**: directly invokes any registered action without a
+  visit to MainWindow
+
+Each of these dominates the Electron Dashboard on at least one axis (latency,
+ubiquity, action depth), and together they fully cover its job.
+
+**Consequence**: First-launch route is `.stats` (already a data-rich view), not
+a launcher screen. If a future "Today" overview is genuinely wanted, it's a new
+sub-view of `StatsView` or a new `MainRoute.today` case — explicitly *not* a
+revival of the Electron Dashboard's launcher pattern.
+
+---
+
+## SADR-014: Repo hoist + Electron archival
+**Status**: Accepted
+
+**Context**: During the Electron→Swift migration the Swift sources lived under
+`nexus-swift/` so the two stacks could coexist. Once Electron parity reached
+v1.0.0 and `src/` was no longer being touched, the `nexus-swift/` prefix had no
+remaining purpose: every script, CI workflow, README link, and IDE breadcrumb
+paid an extra path segment for nothing. macOS apps in the wild (Sparkle, GRDB,
+Rectangle, Stats, Ice) keep the project at repo root; the subdirectory was a
+migration scaffold, not a convention.
+
+**Decision**: After v1.1.0 ship, two-commit cleanup on a single branch:
+1. **Archive Electron** — `git rm -rf src/ electron-builder.yml electron.vite.config.ts package.json pnpm-lock.yaml tsconfig*.json resources/ build/entitlements.mac.plist scripts/test-*.mjs scripts/install-release.sh`. Tag the prior tip as `legacy/electron` (annotated, points to commit `c73e496` = `release: nexus v0.7.0`) so Electron sources are reachable via `git checkout legacy/electron`.
+2. **Hoist** — `git mv nexus-swift/* .` for `Nexus/`, `scripts/`, `project.yml`, `README.md`. Merge `nexus-swift/.gitignore` into root `.gitignore`. Drop the `REPO_ROOT="$PROJECT_DIR/.."` hop from `scripts/generate-app-icon.sh`. Strip `working-directory: nexus-swift` from `.github/workflows/build.yml` and rewrite the artifact glob `nexus-swift/dist/Nexus-*.dmg` → `dist/Nexus-*.dmg`.
+
+The two-commit split gives git's rename detector a clean signal: commit 2 shows
+~75 100% renames instead of "delete A + add B" pairs, which makes review and
+future blame clean.
+
+**Consequence**: Repo root mirrors what an external contributor expects from a
+macOS Swift project — `Nexus/`, `project.yml`, `scripts/`, `README.md`,
+`.github/`. The `.ea/spec/` (Electron-era top-level) stays in place as a
+historical spec; `.ea/spec/swift/` remains the active spec. The
+`legacy/electron` tag is the single recovery handle for Electron code; nothing
+else points to it.
 
 ---
 
