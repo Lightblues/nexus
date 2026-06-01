@@ -27,7 +27,7 @@ final class AppEnvironment: ObservableObject {
             try Paths.ensureDirectories()
             database = try Database(url: Paths.dbFile)
         } catch {
-            fatalError("Failed to open ~/.ea/nexus/nexus.db: \(error)")
+            fatalError("Failed to open nexus.db at \(Paths.dbFile.path): \(error)")
         }
         let pomodoroRepository = PomodoroRepository(database: database)
         let trackerRepository = TrackerRepository(database: database)
@@ -50,10 +50,6 @@ final class AppEnvironment: ObservableObject {
         config.bootstrap()
         notifier.setup()
 
-        Paths.cleanupLegacyFiles()
-
-        // One-shot import of legacy JSON files. Idempotent.
-        _ = await LegacyMigration.runIfNeeded(db: database)
         // After session data is in DB, populate project + tag catalogs.
         await CatalogMigration.runIfNeeded(db: database)
 

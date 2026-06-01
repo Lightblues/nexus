@@ -293,6 +293,62 @@ else points to it.
 
 ---
 
+## SADR-015: Adopt standard macOS data layout
+**Status**: Accepted (v1.2.0)
+
+**Context**: Through v1.1.x, all of Nexus's data lived under `~/.ea/nexus/` —
+config, SQLite database, uploader thumbnail cache, and the file-mirrored log.
+The path was inherited from the Electron build, where it doubled as a
+mackup-friendly dotfile location. After cleanup the only remaining argument for
+`~/.ea/nexus/` was inertia: it doesn't match macOS conventions, sandbox-friendly
+APIs (`FileManager.url(for:in:)`) deliberately don't return it, and Time
+Machine's "back up Application Support, skip Caches" heuristic can't apply to a
+flat-by-kind directory.
+
+**Decision**: Use the standard system-furnished locations, all keyed by bundle
+identifier `site.easonsi.nexus`:
+
+| Kind | Path | Reasoning |
+|---|---|---|
+| User-critical | `~/Library/Application Support/site.easonsi.nexus/` | `config.json`, `nexus.db` (+ `-wal`, `-shm`) — Time Machine backs up; conceptually "the user's data" |
+| Regenerable | `~/Library/Caches/site.easonsi.nexus/` | `uploader-thumbnails/{id}.webp` — system-managed eviction, not backed up |
+| Logs | `~/Library/Logs/site.easonsi.nexus/` | `main.log` + 4 rotated generations — Console.app's "Reports" view picks them up automatically |
+| UI state | `~/Library/Preferences/site.easonsi.nexus.plist` | `NSWindow` frame autosave (already there pre-1.2.0; AppKit owns it) |
+
+`Paths.swift` resolves each via `FileManager.url(for:in:)` and appends the
+bundle id — no hardcoded `~/Library/...` strings. `LegacyMigration.swift`
+(which read the pre-Swift JSON files at app launch) is **deleted**: the
+v1.0/v1.1 import was a one-time event for the early Phase 1 user, and the
+migration to standard paths is not the app's job.
+
+**Consequences**:
+
+- **One-shot external migration**: `scripts/migrate-data-v1.2.0.sh` moves
+  `~/.ea/nexus/{config.json, nexus.db, nexus.db-wal, nexus.db-shm}` to
+  Application Support, archives the rest to `~/.ea/nexus.pre-v1.2.0-bak-<ts>/`,
+  cleans Electron-era residue from `~/Library/Application Support/nexus/` and
+  `~/Library/Logs/nexus/`. Idempotent. Symlinks (e.g. mackup chains pointing at
+  `config.json`) are preserved by `mv`.
+- **Mackup integration breaks**: any `.mackup.cfg` entry like `.ea/nexus/config.yaml`
+  no longer resolves. Re-establishing sync is an explicit user step (update
+  the mackup app config to point at `Library/Application Support/site.easonsi.nexus/config.json`,
+  recreate the symlink). Mackup integration was always a power-user setup, not
+  a default; v1.2.0 deliberately sheds it from the migration script.
+- **Sandbox-future-proof**: the standard locations are exactly the URLs that
+  `NSFileManager` returns inside the sandbox. If we ever ship through the Mac
+  App Store, the on-disk paths simply move under `~/Library/Containers/site.easonsi.nexus/Data/`
+  with the same internal structure — no path-handling code changes needed.
+- **Console.app discovery**: app logs land where macOS surfaces them by
+  default ("Reports" sidebar in Console.app). `log show --predicate 'subsystem == "site.easonsi.nexus"'`
+  also works for OSLog-side queries.
+- **Smaller `Paths.swift`**: down from 14 paths to 8. The dropped entries
+  (`dataFile`, `uploaderFile`, `archiveDir`, `trackerDir`, `archiveFile(year:)`,
+  `trackerFile(date:)`, `legacyWindowStateFile`, `cleanupLegacyFiles()`) were
+  all only used by `LegacyMigration` or referred to legacy file shapes that
+  are now in the database.
+
+---
+
 ## Inherited / mapped from Electron ADRs
 
 The Electron-era ADR full text lives at

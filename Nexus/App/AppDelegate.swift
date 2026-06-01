@@ -15,6 +15,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var clickOutsideMonitor: Any?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        Log.writeLaunchBanner()
+
         // Run bootstrap and don't block UI.
         Task { @MainActor in
             await environment.bootstrap()

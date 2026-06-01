@@ -13,8 +13,8 @@ docs are kept under [`legacy-electron/`](legacy-electron/) for ADR cross-referen
 - **One signed binary** for AX + Accessibility — no `osascript` polling, no
   cross-binary permission friction (former ADR-001)
 - **Native macOS feel**: Core Animation popover, NSPanel palette, AX API, GRDB
-- **Preserve user data**: `~/.ea/nexus/` layout, schema-compatible with the
-  Electron build (legacy JSON stores auto-migrate on first launch)
+- **Standard macOS data layout** (v1.2.0+): config + db in Application Support,
+  cache in Caches, log in Logs — all keyed by bundle id.
 
 ## Non-goals
 - Cross-platform support — macOS only
@@ -42,12 +42,12 @@ docs are kept under [`legacy-electron/`](legacy-electron/) for ADR cross-referen
 | Bundle ID | `site.easonsi.nexus` | **same** (preserves Accessibility grant) |
 | Min macOS | macOS 11+ (Electron 33) | macOS 13.0 (SwiftUI Charts, `MenuBarExtra`) |
 | Architectures | per-arch DMG | universal binary (single DMG) |
-| Data dir | `~/.ea/nexus/` | **same** |
-| Config | `config.yaml` | **same** (parsed via JSON-bridge) |
-| Pomodoro store | `data.json` | **same** schema, Codable + GRDB |
-| Tracker store | `tracker/YYYY-MM-DD.json` | GRDB SQLite (auto-migrated) |
-| Uploader store | `uploader.json` + cache | GRDB SQLite + cache |
-| Logs | `logs/main.log` | **same** (`OSLog` mirror writer) |
+| Data dir | `~/.ea/nexus/` | `~/Library/Application Support/site.easonsi.nexus/` (config + db); `~/Library/Caches/...` (thumbnails); `~/Library/Logs/...` (main.log). See SADR-015 |
+| Config | `config.yaml` | `config.json` (Codable, hot-reloadable) |
+| Pomodoro store | `data.json` (electron-store) | GRDB SQLite |
+| Tracker store | `tracker/YYYY-MM-DD.json` | GRDB SQLite |
+| Uploader store | `uploader.json` + cache | GRDB SQLite + Caches dir |
+| Logs | `logs/main.log` | `~/Library/Logs/site.easonsi.nexus/main.log` (OSLog + file mirror) |
 | Distribution | electron-builder DMG, ad-hoc | `xcodebuild` archive + DMG, ad-hoc |
 | Auto-update | none | none (Sparkle deferred — see SADR-006) |
 | Homebrew cask | `lightblues/homebrew-tap` | **same** cask, no per-arch block |

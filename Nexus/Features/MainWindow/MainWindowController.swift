@@ -63,9 +63,8 @@ final class MainWindowController: NSObject {
         win.titlebarAppearsTransparent = false
         win.isReleasedWhenClosed = false
         // AppKit autosave persists frame to UserDefaults under this key.
-        // Replaces the legacy ~/.ea/nexus/window-state.json — that file is
-        // user-data territory but window geometry is per-machine UI state,
-        // which is what UserDefaults is for.
+        // Window geometry is per-machine UI state, which is what UserDefaults
+        // is for (~/Library/Preferences/site.easonsi.nexus.plist).
         win.setFrameAutosaveName("MainWindow")
         // First-launch fallback if no saved frame exists.
         if win.frame.size.width < 100 {

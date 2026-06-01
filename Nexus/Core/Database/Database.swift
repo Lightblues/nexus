@@ -2,7 +2,8 @@ import Foundation
 import GRDB
 
 /// SQLite-backed storage for Pomodoro + Tracker data.
-/// Single shared `DatabaseQueue` lives at ~/.ea/nexus/nexus.db (WAL mode).
+/// Single shared `DatabaseQueue` lives at
+/// `~/Library/Application Support/site.easonsi.nexus/nexus.db` (WAL mode).
 /// All repositories take this as their dependency.
 final class Database: @unchecked Sendable {
     let queue: DatabaseQueue
