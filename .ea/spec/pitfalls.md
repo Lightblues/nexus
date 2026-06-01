@@ -83,6 +83,37 @@ errors.
    ```
    Catches the long tail of actor-isolation lints we don't want on Xcode 15 CI.
 
+4. **Cross-actor calls in nonisolated SwiftUI View methods** (the v1.2.0 release blocker):
+
+   ```swift
+   // BAD — Xcode 16 warns, Xcode 15 errors
+   private struct SettingsTrampoline: View {
+       let appDelegate: AppDelegate
+       var body: some View {
+           Color.clear.onAppear { route() }
+       }
+       private func route() {
+           appDelegate.environment.mainWindow.show(route: .settings) // ❌ MainActor-isolated method called from nonisolated context
+       }
+   }
+
+   // GOOD
+   @MainActor
+   private func route() {
+       appDelegate.environment.mainWindow.show(route: .settings)
+   }
+   ```
+
+   SwiftUI `View` instance methods are nonisolated by default. They're invoked
+   from main-isolated callbacks (`onAppear`, `onChange`), so at runtime the
+   call is fine — but Swift's static checker doesn't know that. Xcode 16
+   tolerates the implicit hop; Xcode 15 demands an explicit `@MainActor` on
+   the method (or `await`/`Task { @MainActor in ... }` at the call site).
+   This caused the v1.2.0 release to fail in CI while passing locally;
+   v1.2.1 fixed it by annotating `route()`.
+
+   See `NexusApp.swift:36`.
+
 ### 1.3 General rule
 
 > Local "it builds" is not signal. The **only** signal is the CI runner's Xcode
