@@ -1,115 +1,243 @@
 # Command Palette
 
-Raycast-style global launcher for triggering Nexus actions — both from a hotkey
-UI and from external URL-scheme calls.
+Three layers: hotkey, panel window, command registry.
 
-## Dual invocation surfaces, one source of truth
+## CommandRegistry (`Core/CommandRegistry.swift`)
 
+```swift
+struct Command: Identifiable {
+    let id: String                                  // e.g. "pomodoro.toggle"
+    let title: String
+    let group: String?
+    let keywords: [String]
+    let dangerous: Bool
+    let when: () -> Bool                            // visibility predicate
+    let subtitle: () -> String?                     // dynamic — reads live state
+    let run: () async -> Void
+}
+
+@MainActor
+final class CommandRegistry {
+    static let shared = CommandRegistry()
+    private(set) var commands: [Command] = []
+    func register(_ cmd: Command) { ... }
+    func registerMany(_ cmds: [Command]) { ... }
+    func applicable() -> [Command] { commands.filter { $0.when() } }
+    func find(id: String) -> Command? { ... }
+}
 ```
-         ┌────────────────────────┐
-Hotkey → │  PaletteWindow (UI)    │ ─┐
-         └────────────────────────┘  │
-                                     ├──→  CommandRegistry  ──→  Service calls
-  nexus://command/… ──────────────────┘     (single table)       (PomodoroService, …)
+
+Identical shape to Electron's `CommandRegistry.ts` — palette and URL-scheme handler
+are read-only consumers (preserves ADR-009).
+
+## Hotkey (`Core/HotKey.swift`)
+
+The Carbon `RegisterEventHotKey` API is the only system-wide hotkey path that works
+without monitoring all key events:
+
+```swift
+import Carbon.HIToolbox
+
+final class HotKey {
+    private var ref: EventHotKeyRef?
+    private var handler: () -> Void = {}
+
+    func install(keyCombo: KeyCombo, handler: @escaping () -> Void) throws {
+        self.handler = handler
+        var hkRef: EventHotKeyRef?
+        let status = RegisterEventHotKey(
+            UInt32(keyCombo.keyCode),
+            UInt32(keyCombo.carbonModifiers),
+            EventHotKeyID(signature: OSType(0x4E455855), id: 1),  // 'NEXU'
+            GetApplicationEventTarget(),
+            0, &hkRef
+        )
+        guard status == noErr, let hkRef else { throw HotKeyError.registerFailed }
+        self.ref = hkRef
+        installAppEventHandler()  // calls self.handler on hotkey event
+    }
+
+    func uninstall() { if let ref { UnregisterEventHotKey(ref) } }
+}
 ```
 
-Each feature registers commands in `CommandRegistry` on startup. Palette UI and
-URL-scheme handler are **read-only consumers** — adding a command requires no
-changes in either input layer.
+The `KeyCombo` parses `cfg.hotkey.palette` strings like `"CommandOrControl+Shift+Space"`
+into `(keyCode, modifiers)`. On config hot-reload, uninstall + reinstall.
 
-## Global Hotkey
+If registration fails (another app holds the combo): log error, surface a banner in
+Settings → Hotkey, app continues to run (matches ADR-010).
 
-- Default: `CommandOrControl+Shift+Space` (configurable via `config.yaml`)
-- Rejected alternatives:
-  - `Cmd+Space` — Spotlight
-  - `Option+Space` — reserved for Raycast
-  - `Ctrl+Space` — conflicts with macOS "Select previous input source"
-- Registered via Electron `globalShortcut`; hot-reloaded when
-  `hotkey.palette` changes in config.
-- Toggle behavior: if palette is visible, hide it; otherwise show it. Opening
-  the palette always hides the tray popover to avoid two overlapping surfaces.
+## PaletteWindow (`Palette/PaletteWindow.swift`)
 
-## PaletteWindow
+NSPanel subclass — directly equivalent to Electron's `type: 'panel'` (ADR-013):
 
-Frameless, transparent, always-on-top (`screen-saver` level so it floats above
-full-screen apps), 640×420, centered horizontally and at ~22% from the top of
-the active display's work area (matches Raycast's visual position).
+```swift
+final class PaletteWindow: NSPanel {
+    init() {
+        super.init(
+            contentRect: NSRect(x: 0, y: 0, width: 640, height: 420),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        level = .screenSaver        // floats above full-screen apps
+        isFloatingPanel = true
+        hidesOnDeactivate = true
+        becomesKeyOnlyIfNeeded = true     // shows without [NSApp activate]
+        backgroundColor = .clear
+        isOpaque = false
+        hasShadow = true
+        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+        contentView = NSHostingView(rootView: PaletteView())
+    }
 
-On macOS the window is created with `type: 'panel'` so showing/focusing it
-does **not** call `[NSApp activate]` and therefore does not yank other Nexus
-windows (notably MainWindow) to the global foreground. The hotkey and the
-main window stay visually independent — same model as Spotlight / Raycast
-preferences. (See ADR-013.)
+    override var canBecomeKey: Bool { true }   // accept keyboard
+    override var canBecomeMain: Bool { false }
+}
+```
 
-Loaded via URL hash `#/palette` — the existing renderer handles it alongside
-`#/stats`, `#/settings`, `#/tracker` (ADR-006 routing rule preserved).
+Position: centered horizontally, **22% from the top** of the active display's visible
+frame. Active display = the one containing `NSEvent.mouseLocation`. Compute on every
+`show()` so it follows the user's current screen.
 
-## PaletteView (renderer)
+`hidesOnDeactivate = true` + `nonactivatingPanel` is what gives us the "summon → use →
+dismiss" pattern Raycast/Spotlight users expect, without dragging MainWindow to the
+foreground (the bug ADR-013 fixed).
 
-| Area | Behavior |
-|------|----------|
-| Search input | Autofocused on show; text is selected so the next keystroke replaces the previous query |
-| Results | Substring-first scoring, subsequence fallback; fields ranked: title > group > keywords > subtitle |
-| Keyboard | ↑/↓ navigate, `Enter` run, `Esc` close; hover selects |
-| Footer | Home icon (→ `window.openMain`) · toast messages (success/failure) · result count · key hints |
-| Discoverability | Empty query → all currently-applicable commands (VSCode command-palette style) |
+## PaletteView (SwiftUI)
 
-## URL Scheme
+```swift
+struct PaletteView: View {
+    @State private var query = ""
+    @State private var selection = 0
+    @Environment(CommandRegistry.self) private var registry
+    @FocusState private var searchFocused: Bool
 
-Shape: `nexus://command/<id>?<args>`
+    var matches: [Command] {
+        let pool = registry.applicable()
+        return query.isEmpty ? pool : PaletteSearch.score(pool, query: query)
+    }
 
-Examples:
-- `nexus://command/pomodoro.toggle`
-- `nexus://command/pomodoro.start?project=work`
+    var body: some View {
+        VStack(spacing: 0) {
+            TextField("Search Nexus…", text: $query)
+                .textFieldStyle(.plain)
+                .font(.system(size: 18))
+                .focused($searchFocused)
+                .padding(16)
+            Divider()
+            List(Array(matches.enumerated()), id: \.element.id) { index, cmd in
+                CommandRow(cmd: cmd, isSelected: index == selection)
+                    .onTapGesture { run(cmd) }
+            }
+            Divider()
+            FooterView(matchCount: matches.count, message: lastMessage)
+        }
+        .background(.ultraThickMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .frame(width: 640, height: 420)
+        .onAppear { searchFocused = true; selection = 0 }
+        .onKeyPress(.upArrow)   { selection = max(0, selection - 1); return .handled }
+        .onKeyPress(.downArrow) { selection = min(matches.count - 1, selection + 1); return .handled }
+        .onKeyPress(.return)    { if let cmd = matches[safe: selection] { run(cmd) }; return .handled }
+        .onKeyPress(.escape)    { dismiss(); return .handled }
+    }
+}
+```
 
-Registration:
-- `app.setAsDefaultProtocolClient('nexus')` at startup
-- `Info.plist` declared via `electron-builder.yml` → `protocols`
-- Handled on `open-url` (macOS) and `second-instance` (cold start / other platforms)
-- Single-instance lock required so repeat invocations reuse the running app
+Note: SwiftUI `.onKeyPress` requires macOS 14+. On macOS 13, fall back to an
+`NSViewRepresentable` key handler. Targeting macOS 13 means we ship the fallback by
+default.
 
-Security note: commands flagged `dangerous: true` should require a UI
-confirmation when triggered from `url-scheme` (not yet implemented; future
-work).
+## Search (`Palette/PaletteSearch.swift`)
 
-## Registered commands (initial)
+Same scoring as Electron palette: substring-first, subsequence fallback, ranked by
+field (title > group > keywords > subtitle).
 
-| ID | When | Action |
-|----|------|--------|
-| `pomodoro.toggle` | always | Smart: idle→start, running→pause, paused→resume |
-| `pomodoro.start` | idle / finished | Start a focus session |
-| `pomodoro.pause` | running | Pause current session |
-| `pomodoro.resume` | paused | Resume paused session |
-| `pomodoro.finishEarly` | running/paused (work) | Record session and move to finished |
-| `pomodoro.exit` | running / paused | Discard current session (dangerous) |
-| `window.openMain` | always | Open main window (default route = stats) |
-| `window.openStats` | always | Open main window at `/stats` |
-| `window.openTracker` | always | Open main window at `/tracker` |
-| `window.openSettings` | always | Open main window at `/settings` |
-| `app.quit` | always | Quit Nexus (dangerous) |
+```swift
+enum PaletteSearch {
+    static func score(_ commands: [Command], query: String) -> [Command] { ... }
+    private static func fieldScore(_ haystack: String, _ needle: String) -> Double {
+        if haystack.range(of: needle, options: .caseInsensitive) != nil { return 1.0 }
+        return subsequenceScore(haystack, needle)
+    }
+}
+```
 
-Subtitles are dynamic — e.g. `pomodoro.toggle` shows `running · 12:34 · click to pause`.
+Empty query → return all `applicable()` commands as-is (VSCode-style discoverability).
 
-## Focus restoration on dismiss
+## URL Scheme (`Core/URLScheme.swift`)
 
-Because the palette is an `NSPanel`-style window, opening it never activates
-the Nexus app — the previously active app keeps its activation throughout.
-On dismiss we simply `hide()` the window; we deliberately do **not** call
-`app.hide()` (which would also hide MainWindow if the user had it open).
+`nexus://command/<id>?<args>` — handled by `NSAppleEventManager`:
 
-PaletteView **must** use `height: 100%`, not `height: 100vh`. The global
-`#root` selector applies `padding: 16px` (shared across all renderer views).
-`100vh` fills the entire BrowserWindow viewport *including* the padding area,
-so the bottom ~16 px of the component overflows and is clipped by the
-container's `overflow: hidden` + `borderRadius: 12px`. Using `100%` respects
-the parent's content box and keeps the footer fully visible regardless of how
-many commands are listed.
+```swift
+final class URLScheme: NSObject {
+    func install() {
+        NSAppleEventManager.shared().setEventHandler(
+            self,
+            andSelector: #selector(handle(_:withReplyEvent:)),
+            forEventClass: AEEventClass(kInternetEventClass),
+            andEventID: AEEventID(kAEGetURL)
+        )
+    }
 
-## Extending
+    @objc func handle(_ event: NSAppleEventDescriptor,
+                      withReplyEvent: NSAppleEventDescriptor) {
+        guard let urlString = event.paramDescriptor(forKeyword: keyDirectObject)?
+            .stringValue,
+              let url = URL(string: urlString),
+              url.scheme == "nexus", url.host == "command"
+        else { return }
 
-1. Create `features/<feature>/commands.ts`
-2. Export `register<Feature>Commands()` that calls `commandRegistry.registerMany([...])`
-3. Call it from `main/index.ts` before `registerPaletteIPC()`
+        let id = String(url.path.dropFirst())     // "/pomodoro.start" → "pomodoro.start"
+        let args = url.queryParams                  // [String: String]
+        Task { @MainActor in
+            guard let cmd = CommandRegistry.shared.find(id: id) else { return }
+            if cmd.dangerous { /* TODO: confirm UI — same TODO as Electron */ }
+            await cmd.run()
+        }
+    }
+}
+```
 
-Commands inherit existing service state — they are not a new abstraction, just
-a second entry point.
+`Info.plist`:
+```xml
+<key>CFBundleURLTypes</key>
+<array>
+  <dict>
+    <key>CFBundleURLName</key>
+    <string>site.easonsi.nexus</string>
+    <key>CFBundleURLSchemes</key>
+    <array><string>nexus</string></array>
+  </dict>
+</array>
+```
+
+Single-instance lock is automatic for macOS bundled apps — re-launching the
+already-running `Nexus.app` simply forwards the URL via Apple Events.
+
+## Registered commands
+
+Each feature module exports a `registerCommands(into: CommandRegistry)` function
+called from `AppEnvironment.bootstrap()`:
+
+```swift
+PomodoroCommands.register(into: registry, service: pomodoro)
+TrackerCommands.register(into: registry, service: tracker)
+UploaderCommands.register(into: registry, service: uploader)
+WindowCommands.register(into: registry, mainWindow: mainWindow)
+AppCommands.register(into: registry)   // app.quit, etc.
+```
+
+The Electron palette command table (`palette.md` § "Registered commands") transfers
+1:1.
+
+## Focus restoration
+
+Because the palette is `nonactivatingPanel`, summoning it never activates Nexus.
+Dismissal: `palette.orderOut(nil)`. We deliberately never call `NSApp.hide(nil)` —
+that would hide MainWindow if open, the same latent bug ADR-013 fixed in Electron.
+
+The footer "home" icon → `WindowCommands.openMain` (opens MainWindow + activates
+Nexus). This is the single path where summoning the palette eventually leads to
+Nexus becoming active, and it requires an explicit user action.

@@ -1,1 +1,0 @@
-export { registerWindowCommands } from './commands'

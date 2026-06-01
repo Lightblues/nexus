@@ -1,178 +1,325 @@
-# Architecture Decisions
+# Swift-side Architecture Decisions (SADRs)
 
-## ADR-001: AppleScript over get-windows for window tracking
-**Date**: 2025  
-**Status**: Accepted
-
-**Context**: `get-windows` uses a standalone Swift binary that requires its own Accessibility permission entry. In production builds, macOS treats each binary separately, causing repeated permission prompts.
-
-**Decision**: Use AppleScript via `osascript` which inherits the main Electron app's Accessibility permission. No additional binaries to package.
-
-**Consequence**: Removed `get-windows` from dependencies. Slightly slower per-poll (AppleScript overhead ~50ms) but acceptable at 5s intervals.
+These ADRs are specific to the Swift rewrite. For each Electron ADR with a direct
+Swift counterpart, the mapping is recorded at the bottom under "Inherited / mapped".
 
 ---
 
-## ADR-002: Shared type system (`src/shared/`)
-**Date**: 2026-04  
+## SADR-001: Keep bundle ID `site.easonsi.nexus`
 **Status**: Accepted
 
-**Context**: The same interfaces (PomodoroStatus, SessionRecord, UploaderConfig, etc.) were duplicated in 3+ places: main process types, preload/index.ts (300+ lines of interface defs), and renderer components (local re-declarations like `UploaderConfigLocal`). Changes to one copy would silently diverge from others.
+**Context**: macOS records Accessibility, Apple Events, and Notification grants by
+bundle ID. The Electron build's v0.5.0 release already paid the user-facing cost of
+renaming `com.ea.nexus → site.easonsi.nexus` (changelog notes a forced re-grant).
 
-**Decision**: Create `src/shared/types.ts` as single source of truth. Configure `@shared` alias in electron-vite + tsconfig for all three processes. Main-process-only types (`Buffer`-based) kept in feature `types.ts` files.
+**Decision**: The Swift binary keeps `site.easonsi.nexus`. Existing users' AX grant
+applies automatically the first time the new build runs. No re-prompt unless macOS
+detects a code-signing identity change (ad-hoc → ad-hoc is the same TeamID-less
+bucket, so it should pass through silently — verify in beta).
 
-**Consequence**: ~20 files updated. Preload reduced from 300+ lines to pure imports. Renderer components import types directly. Compile-time safety across process boundaries.
+**Consequence**: Smooth upgrade. If the user installed via Homebrew cask, the cask
+upgrade replaces the bundle in-place and the AX grant survives.
 
 ---
 
-## ADR-003: IPC channel constants (`src/shared/ipc.ts`)
-**Date**: 2026-04  
+## SADR-002: AppKit `NSStatusItem` + `NSPopover`, not SwiftUI `MenuBarExtra`
 **Status**: Accepted
 
-**Context**: 47 IPC channels were magic strings scattered across preload and `*.ipc.ts` files. Typo in channel name → silent runtime failure with no compile-time warning.
+**Context**: SwiftUI 13+ ships `MenuBarExtra` which appears to obsolete the AppKit
+status item dance. But: (a) the uploader feature drops images on the icon — needs
+the underlying button view to register drag types; (b) the pomodoro feature writes
+to `attributedTitle` 1Hz — `MenuBarExtra` re-renders the whole label; (c) custom
+popover sizing/animation is awkward in `MenuBarExtra`.
 
-**Decision**: Define all channels as `as const` object in `src/shared/ipc.ts`. Both preload and main handlers import `IPC.pomodoro.start` instead of `'pomodoro:start'`.
-
-**Consequence**: Rename/delete a channel → TypeScript error on both sides. Minor verbosity increase (`IPC.pomodoro.start` vs string literal) but worth the safety.
-
----
-
-## ADR-004: Pomodoro data auto-archiving
-**Date**: 2026-04  
-**Status**: Accepted
-
-**Context**: All pomodoro sessions stored in `data.json` as one array. `electron-store` serializes entire store on every `.set()`. At 2000+ sessions: slow writes, growing memory usage.
-
-**Decision**: On app startup, sessions older than 90 days auto-archived to `~/.ea/nexus/archive/pomodoro-{YYYY}.json`. Active store stays small. `getAllSessions()` merges active + archived for long-range views (activity calendar). Archive files are append-only with ID-based deduplication.
-
-**Consequence**: Active store stays bounded (~90 days × ~10 sessions/day ≈ 900 records max). Historical data preserved and queryable. Tracker already used per-day files, so this aligns the pattern.
-
----
-
-## ADR-005: IPC listener cleanup pattern
-**Date**: 2026-04  
-**Status**: Accepted
-
-**Context**: Preload `ipcRenderer.on()` listeners didn't return cleanup functions. Every time a renderer component mounted, it registered new listeners without removing old ones. Repeated view switches → listener accumulation → memory leak → eventual crash.
-
-**Decision**: All preload event listeners (`onTick`, `onStatus`, `onFinished`, `onImageDropped`) return `() => void` cleanup functions. Renderer `useEffect` calls cleanup on unmount.
-
-**Consequence**: Fixed memory leak. Breaking change to preload API (return type `void` → `() => void`), updated `env.d.ts` accordingly.
-
----
-
-## ADR-006: Window type detection via URL hash
-**Date**: 2026-04  
-**Status**: Accepted
-
-**Context**: App.tsx used `window.innerWidth > 500` to distinguish PopupWindow from MainWindow. Fragile — would break if popup width config changed.
-
-**Decision**: Purely hash-based detection. MainWindow always loads with `#/stats`, `#/settings`, or `#/tracker`. PopupWindow loads without hash → defaults to dashboard.
-
-**Consequence**: Removed width heuristic. Deterministic routing regardless of window dimensions.
-
----
-
-## ADR-007: Unified Edit Modal for Pomodoro session config
-**Date**: 2026-04  
-**Status**: Accepted
-
-**Context**: Idle state had an inline project/tags/task editor that took ~120px of vertical space in the 320×400 popup, often causing scroll. Running/paused state had a separate Edit Modal. Two different UIs for the same data, duplicated rendering code.
-
-**Decision**: Both idle and running/paused use the same Edit Modal (opened by clicking session info summary). Idle state shows a compact one-line summary card instead of inline forms. Tags area has `maxHeight: 100px` with scroll for large tag lists. Esc key and backdrop click close the modal.
-
-**Consequence**: Cleaner idle state (ring + summary + Start button fits without scroll). Single code path for editing. Tags overflow handled gracefully.
-
----
-
-## ADR-008: pnpm enforcement
-**Date**: 2026-04  
-**Status**: Accepted
-
-**Context**: Mixed usage of npm/pnpm caused issues. `build:mac` script used `npm run build`. pnpm v10 defaults to blocking dependency postinstall scripts, causing Electron binary not to install.
-
-**Decision**: 
-- `preinstall` hook: `npx only-allow pnpm`
-- `engines`: `pnpm >= 9`
-- `packageManager`: `pnpm@10.12.1`
-- `pnpm.onlyBuiltDependencies`: whitelist electron, esbuild, sharp, node-mac-permissions
-- All scripts use `pnpm` instead of `npm run`
-
-**Consequence**: `npm install` or `yarn install` → immediate error. Electron binary installs correctly via whitelisted postinstall scripts.
-
----
-
-## ADR-009: CommandRegistry as unified invocation surface
-**Date**: 2026-04
-**Status**: Accepted
-
-**Context**: Needed a Raycast-like command palette (global hotkey → searchable list → action) and external URL-scheme triggering (`nexus://command/...`) so other apps / Shortcuts / CLI tools can drive Nexus. Naively these are two separate systems.
-
-**Decision**: Single `CommandRegistry` (in `src/main/core/CommandRegistry.ts`) is the source of truth. Features register commands; both the palette UI (via IPC `palette:list` / `palette:execute`) and the URL-scheme handler (`urlSchemeHandler.handle`) are read-only consumers of the registry. A command is `{ id, title, subtitle?, group?, keywords?, when?, run }` — with `subtitle` allowed to be a function so entries can show live state (e.g. `running · 12:34`).
+**Decision**: Use `NSStatusItem` directly. SwiftUI views are embedded via
+`NSHostingController` inside `NSPopover`. The status button's view is replaced with
+a custom `NSView` subclass that hosts the icon and accepts drag types.
 
 **Rejected alternatives**:
-- **Expose as a Raycast extension instead of building a palette**: requires users to run Raycast, adds IPC/HTTP hop, limited UI customization, per-command hotkey binding gated behind Raycast Pro. Reverse direction is fine — users can still add a thin Raycast Quicklink that calls `nexus://command/...`.
-- **Separate palette-command and URL-command tables**: duplicate registration effort, `when` semantics would drift.
+- `MenuBarExtra(.window)` — drag receiver isn't pluggable; would need private API
+  to attach drag types to the menu bar item.
+- Hybrid (MenuBarExtra for icon, custom NSPopover for content) — two ownership
+  models in conflict.
 
-**Consequence**: Adding a command = one file (`features/<x>/commands.ts`). Palette discovers it automatically, URL scheme can invoke it automatically. `when` predicates are uniform. `dangerous: true` provides a future hook for URL-scheme confirmation prompts.
-
----
-
-## ADR-010: Global hotkey default = `Cmd+Shift+Space`
-**Date**: 2026-04
-**Status**: Accepted
-
-**Context**: Need a default that doesn't conflict with Spotlight (Cmd+Space), Raycast (Opt+Space), or macOS input-source switcher (Ctrl+Space + Ctrl+Opt+Space). User explicitly reserved `Opt+Space` for Raycast.
-
-**Decision**: Default to `CommandOrControl+Shift+Space`. Configurable via `config.yaml` → `hotkey.palette` with hot-reload (re-register on `config:updated`).
-
-**Consequence**: Coexists cleanly with Spotlight + Raycast. The `Shift` modifier keeps it in the same muscle-memory family ("space-to-search") while being clearly distinct. If the accelerator fails to register (another app grabbed it), a logger.error is emitted but the app continues to run.
+**Consequence**: ~50 lines of AppKit boilerplate at app start. In return, full
+control over the status item.
 
 ---
 
-## ADR-011: Ad-hoc codesign via electron-builder identity, not --deep
-**Date**: 2026-04
+## SADR-003: `@Observable` over `ObservableObject`
+**Status**: Accepted (with macOS 13 fallback noted)
+
+**Context**: Swift 5.9 / macOS 14 introduced the `@Observable` macro, which removes
+`@Published` boilerplate and produces fine-grained dependency tracking. Available on
+the macOS-13 deployment target via the Observation backport in newer toolchains.
+
+**Decision**: Default to `@Observable` for all services. If a specific call site can't
+use it (e.g. legacy SwiftUI bridge), fall back to `ObservableObject` and document the
+reason at the top of the file.
+
+**Consequence**: Less boilerplate, fewer over-renders. Slight risk if the
+Observation backport surfaces compatibility issues — bake into the beta phase.
+
+---
+
+## SADR-004: One target, no XPC services, no helper bundles
 **Status**: Accepted
 
-**Context**: Nexus has no Apple Developer ID ($99/year). Without any code signature, Apple Silicon macOS kills the process at launch (`killed: 9`). An initial attempt used a custom `afterPack` hook with `codesign --force --deep --sign -`, but `--deep` signs outside-in, breaking Electron's nested bundle signature chain (main app → Electron Framework → helpers). macOS dyld then rejects the app with "mapping process and mapped file have different Team IDs".
+**Context**: The Electron build ships 4 helper bundles (Renderer, GPU, Plugin,
+Network) — each a separate process driven by Chromium's sandbox model. Translating
+that to Swift's XPC services would reproduce the multi-process overhead we're
+trying to escape (~80 MB across helpers in the Electron build).
 
-**Decision**: Use `mac.identity: '-'` in `electron-builder.yml`. This delegates to `@electron/osx-sign` (Electron's official signing tool), which knows the correct inside-out order for Electron apps. Combined with the Homebrew cask `postflight` that strips `com.apple.quarantine`, users get a zero-friction install without Gatekeeper prompts.
+**Decision**: Single binary. AX polling, image compression, network upload, UI all
+run in the same process. Use Swift Concurrency (`Task.detached`, actors) for
+concurrency without process boundaries.
 
 **Rejected alternatives**:
-- `codesign --deep --sign -` in afterPack: outside-in order breaks nested bundles.
-- No signing at all: arm64 macOS refuses to launch unsigned binaries.
-- Paid Apple Developer ID: $99/year, overkill for a personal tool.
+- XPC service for image compression — would isolate sharp-equivalent crashes from
+  the main app, but ImageIO is mature and crash-resistant; not worth the IPC
+  overhead and bundle complexity.
+- XPC service for the AX poller — same reasoning. AX call failures are recoverable.
 
-**Consequence**: CI builds produce ad-hoc signed `.app` bundles that launch on both arm64 and x64 without Gatekeeper intervention (after quarantine strip). If Apple tightens ad-hoc signing rules in future macOS versions, a Developer ID may become necessary.
-
----
-
-## ADR-013: Palette as `type: 'panel'` (non-activating window)
-**Date**: 2026-04
-**Status**: Accepted
-
-**Context**: With the original PaletteWindow, opening the palette via the global hotkey while MainWindow was visible (e.g. behind another app on a different Space) would yank MainWindow to the global foreground alongside the palette. Root cause: on macOS, `BrowserWindow.show()` / `focus()` on a regular window calls `[NSApp activate]`, which brings every visible window of the app to the front. As a hack to mitigate the "Nexus stays invisibly active after dismiss" symptom, `app.hide()` was called on dismiss — which had its own latent bug (it would hide MainWindow if the user had it open). This violated the user expectation that the global hotkey and the app's configuration windows are isolated, the same way Raycast's palette and Raycast's preferences are independent.
-
-**Decision**: Create the palette window with `type: 'panel'` on macOS. Electron ≥ v30 (PR `electron#41750`) ensures `show()`/`focus()` on a panel window do **not** activate the parent app. The previous app keeps its activation; the palette becomes the key window only for keyboard input. The compensating `app.hide()` on dismiss is no longer needed (and is removed, fixing the latent MainWindow-disappears bug).
-
-**Rejected alternatives**:
-- **`showInactive()` + delayed focus**: still activates the app once any focus call is made, and breaks autofocus on the search input.
-- **`app.dock.hide()` / `setActivationPolicy('accessory')`** to make Nexus an agent app: bigger UX change (no Dock icon at all), affects every window, not just the palette.
-
-**Consequence**: Hotkey and main window are now visually independent. MainWindow stays in its prior Z-order/Space when the palette is summoned, and stays visible when the palette is dismissed. Requires Electron ≥ v30 (we ship 33.x, so this is satisfied today and pinned by the postinstall script).
+**Consequence**: Simpler bundle structure. Single Accessibility prompt. No nested
+codesign chain (sidesteps the Electron-build ADR-011 trap entirely).
 
 ---
 
-## ADR-012: Homebrew tap for distribution
-**Date**: 2026-04
+## SADR-005: Drop `electron-store` shape, use per-feature codable JSON
 **Status**: Accepted
 
-**Context**: Need a one-command install path for users. Official `homebrew-cask` requires signed + notarized apps (rejected without Apple Developer ID). Manual DMG download + drag-to-Applications + right-click-open is too many steps.
+**Context**: electron-store wraps user data in a top-level container with a
+`__internal__` schema-version key. The Swift port could mimic that, but the only
+purpose was electron-store's own bookkeeping.
 
-**Decision**: Self-hosted tap at `lightblues/homebrew-tap` with a cask definition (`Casks/nexus.rb`). The cask uses architecture-aware URLs (`arch arm: "arm64", intel: "x64"`), per-arch sha256 verification, and a `postflight` hook to strip quarantine. The tap is auto-bumped by the release job in `build.yml` — no separate workflow needed (GITHUB_TOKEN-created releases don't trigger other workflows due to GitHub's anti-recursion rule, so the tap-update steps are inlined in the same job). A `workflow_dispatch`-only `update-tap.yml` is kept as fallback.
+**Decision**: Each feature owns a typed `Codable` struct serialized as the root JSON
+object. `data.json` becomes `PomodoroData`; `uploader.json` becomes `UploaderData`;
+tracker keeps per-day files. A small migration step on first launch reads the
+electron-store wrapped form and rewrites it as the bare struct (see `migration.md`).
+
+**Consequence**: One-way migration on first Swift launch. Files become more readable
+(no extra wrapping). Future schema changes use a `version: Int` field at the struct
+root.
+
+---
+
+## SADR-006: Sparkle for auto-update
+**Status**: Deferred (revisit at v2)
+
+**Context**: The Electron build has no auto-update — users get new versions only via
+`brew upgrade --cask nexus`. That's fine for the `brew` users but loses the chance
+to nudge non-Homebrew installers.
+
+**Original decision**: Integrate Sparkle 2 with EdDSA-signed appcast at
+`https://github.com/Lightblues/nexus/releases/latest/download/appcast.xml`. Auto-check
+weekly, prompt user before downloading. The Homebrew tap continues to work as the
+primary distribution; Sparkle is a fallback for direct DMG users and a way to surface
+release notes inside the app.
+
+**Why deferred at v1.x**: Single-developer project, small user base, brew + manual
+DMG cover both audience cohorts. The marginal value of Sparkle (one-click in-app
+update for non-brew users) doesn't outweigh ~5 hours of integration + EdDSA key
+management surface area at this scale. Revisit when (a) user count grows enough that
+"go to GitHub Releases" feels like a cliff, or (b) we need to ship a security-relevant
+fix and brew cadence isn't fast enough.
+
+**Consequence if/when adopted**: Two install paths (cask + Sparkle) must be kept in
+sync via the release pipeline. Adds ~3 MB to the bundle (Sparkle.framework). The
+EdDSA private key becomes an attack vector — must live in GitHub Secrets, never in
+the repo.
+
+---
+
+## SADR-007: Yams for YAML, not custom parser
+**Status**: Accepted
+
+**Context**: Three real choices for YAML parsing in Swift: Yams (LibYAML wrapper —
+mature), a hand-rolled parser, or shelling out to a YAML CLI. The config schema is
+small but has nested structures, lists, and quoted-string edge cases.
+
+**Decision**: Use [Yams](https://github.com/jpsim/Yams) via SwiftPM. It's the de facto
+choice (used by SwiftLint, Vapor), MIT-licensed, single-dep.
 
 **Rejected alternatives**:
-- Official `homebrew-cask`: requires notarization.
-- GitHub Releases only: users must manually handle Gatekeeper.
-- Separate `update-tap.yml` triggered by `on: release`: GITHUB_TOKEN-created releases don't fire other workflows.
+- Hand-rolled — too much YAML edge-case surface area.
+- JSON-only config — would break compatibility with existing `~/.ea/nexus/config.yaml`.
 
-**Consequence**: `brew install --cask lightblues/tap/nexus` — single command, auto-downloads correct architecture, strips quarantine, ready to run. Future projects can share the same tap.
+**Consequence**: One transitive dep. `Package.resolved` pins the version.
+
+---
+
+## SADR-008: Carbon `RegisterEventHotKey` for global hotkey
+**Status**: Accepted
+
+**Context**: macOS has two paths for global hotkeys: Carbon HotKey API and
+`NSEvent.addGlobalMonitorForEvents`. The latter requires monitoring **every** key
+event in the system — wasteful and triggers false-positive Accessibility prompts.
+Carbon HotKey installs a kernel-level filter and only fires for the configured combo.
+
+**Decision**: Wrap Carbon's `RegisterEventHotKey` in `Core/HotKey.swift`. It's
+deprecated in name but actively maintained (used by Magnet, Rectangle, etc.).
+
+**Rejected alternatives**:
+- `NSEvent.addGlobalMonitor*` — no Accessibility benefit, monitors all keys, adds
+  overhead.
+- `MASShortcut` library — wraps Carbon but adds a dep + UI components we don't need.
+
+**Consequence**: A 60-line `HotKey.swift` wrapper. No prompt for "Input Monitoring"
+permission (which `addGlobalMonitor` would trigger).
+
+---
+
+## SADR-009: Use ImageIO + (optional) `libwebp` for compression, not link `sharp` / libvips
+**Status**: Accepted
+
+**Context**: `sharp` (libvips) is the gold standard for fast image processing in
+Node. macOS ships ImageIO, which covers JPEG / PNG / WebP / HEIC encode + decode at
+performance comparable to libvips for typical web image sizes (≤ 4K).
+
+**Decision**: Compression goes through ImageIO. PNG palette optimization parity
+with sharp's libimagequant is deferred — v1 ships with vanilla PNG. If the
+compression ratio gap proves user-visible, add an optional `libimagequant` binary
+in v2.
+
+**Consequence**: No native binary linking, no x86/arm64 fat-lib management. Slightly
+larger PNGs in worst case (~10-20% vs sharp). JPEG/WebP are at parity.
+
+---
+
+## SADR-010: AX-API + lean Apple Events (browser URL only), drop AppleScript
+**Status**: Accepted
+
+**Context**: Electron ADR-001 chose AppleScript-via-`osascript` to avoid bundling a
+separate `get-windows` binary (which required its own AX permission). Now we're
+already a single signed binary, so the original constraint disappears.
+
+**Decision**: Window title + bundle ID via AX (`AXUIElementCopyAttributeValue`).
+**Browser URL** still requires Apple Events because no public AX attribute exposes
+browser tab URLs — so we keep a single compiled `NSAppleScript` per browser, called
+only when the front app is in `enrichApps`.
+
+**Consequence**: Per-poll cost drops from ~50 ms (osascript fork) to ~1 ms (AX) for
+non-browsers, and ~5 ms (compiled NSAppleScript reuse) for browsers. Same
+Accessibility grant. Apple Events permission is requested lazily on first browser
+URL fetch.
+
+---
+
+## SADR-011: NSPanel `nonactivatingPanel`, port of Electron ADR-013
+**Status**: Accepted
+
+**Context**: ADR-013 fixed a bug where summoning the palette dragged MainWindow to
+the global foreground because Electron's `BrowserWindow.show()` calls
+`[NSApp activate]`. The Electron fix used `type: 'panel'` (Electron PR #41750).
+
+**Decision**: Same model in Swift — `NSPanel` subclass with `.nonactivatingPanel`
+style mask, `becomesKeyOnlyIfNeeded = true`, `hidesOnDeactivate = true`. The dismiss
+path never calls `NSApp.hide(nil)`, preserving MainWindow visibility.
+
+**Consequence**: Identical UX to the Electron build's post-ADR-013 state. The latent
+bug from the pre-fix Electron palette is impossible to reintroduce because the
+underlying primitive (NSPanel) is what gives us the property.
+
+---
+
+## SADR-012: Universal binary, drop per-arch DMG split
+**Status**: Accepted
+
+**Context**: Electron build ships separate `arm64` and `x64` DMGs (Cask uses
+`arch arm:` block). A universal Swift binary is a small added size (~30%) that
+simplifies distribution.
+
+**Decision**: `ARCHS = arm64 x86_64`, single `Nexus.dmg`. Cask drops the `arch`
+block. Single sha256 to track.
+
+**Consequence**: One artifact in the release. The CI matrix shrinks from
+`{arm64, x64}` to a single `macos-latest` job. Bundle size up from ~10 MB to ~13 MB
+(both arches), still 95%+ smaller than Electron.
+
+---
+
+## SADR-013: Drop Dashboard view (Electron `Dashboard.tsx`)
+**Status**: Accepted
+
+**Context**: The Electron build has a `Dashboard.tsx` (39 lines, 4 emoji
+cards: 🍅 Pomodoro / 🖼️ Uploader / 📝 Notes / ⚙️ Settings). It serves as the
+default landing page of `MainWindow` because the hash router needs *something*
+to show on `#/`. Functionally it's a feature launcher, not a dashboard — there
+is no aggregate today-view data on it.
+
+**Decision**: Don't port. The Swift main window already has three superior
+entry surfaces:
+- **Sidebar**: always-visible list (Stats / Tracker / Uploader / Settings),
+  zero clicks to switch
+- **Menu bar popover**: Pomodoro is one click away from anywhere in the OS
+- **Command palette (⌘K)**: directly invokes any registered action without a
+  visit to MainWindow
+
+Each of these dominates the Electron Dashboard on at least one axis (latency,
+ubiquity, action depth), and together they fully cover its job.
+
+**Consequence**: First-launch route is `.stats` (already a data-rich view), not
+a launcher screen. If a future "Today" overview is genuinely wanted, it's a new
+sub-view of `StatsView` or a new `MainRoute.today` case — explicitly *not* a
+revival of the Electron Dashboard's launcher pattern.
+
+---
+
+## SADR-014: Repo hoist + Electron archival
+**Status**: Accepted
+
+**Context**: During the Electron→Swift migration the Swift sources lived under
+`nexus-swift/` so the two stacks could coexist. Once Electron parity reached
+v1.0.0 and `src/` was no longer being touched, the `nexus-swift/` prefix had no
+remaining purpose: every script, CI workflow, README link, and IDE breadcrumb
+paid an extra path segment for nothing. macOS apps in the wild (Sparkle, GRDB,
+Rectangle, Stats, Ice) keep the project at repo root; the subdirectory was a
+migration scaffold, not a convention.
+
+**Decision**: After v1.1.0 ship, two-commit cleanup on a single branch:
+1. **Archive Electron** — `git rm -rf src/ electron-builder.yml electron.vite.config.ts package.json pnpm-lock.yaml tsconfig*.json resources/ build/entitlements.mac.plist scripts/test-*.mjs scripts/install-release.sh`. Tag the prior tip as `legacy/electron` (annotated, points to commit `c73e496` = `release: nexus v0.7.0`) so Electron sources are reachable via `git checkout legacy/electron`.
+2. **Hoist** — `git mv nexus-swift/* .` for `Nexus/`, `scripts/`, `project.yml`, `README.md`. Merge `nexus-swift/.gitignore` into root `.gitignore`. Drop the `REPO_ROOT="$PROJECT_DIR/.."` hop from `scripts/generate-app-icon.sh`. Strip `working-directory: nexus-swift` from `.github/workflows/build.yml` and rewrite the artifact glob `nexus-swift/dist/Nexus-*.dmg` → `dist/Nexus-*.dmg`.
+
+The two-commit split gives git's rename detector a clean signal: commit 2 shows
+~75 100% renames instead of "delete A + add B" pairs, which makes review and
+future blame clean.
+
+**Consequence**: Repo root mirrors what an external contributor expects from a
+macOS Swift project — `Nexus/`, `project.yml`, `scripts/`, `README.md`,
+`.github/`. The `.ea/spec/` (Electron-era top-level) stays in place as a
+historical spec; `.ea/spec/swift/` remains the active spec. The
+`legacy/electron` tag is the single recovery handle for Electron code; nothing
+else points to it.
+
+---
+
+## Inherited / mapped from Electron ADRs
+
+The Electron-era ADR full text lives at
+[`legacy-electron/decisions.md`](legacy-electron/decisions.md). The table below
+maps each one to its Swift fate.
+
+| Electron ADR | Status in Swift | Swift counterpart |
+|---|---|---|
+| ADR-001 (osascript over get-windows) | **Reverted** | Native AX API now that single-binary lifts the dual-permission constraint (SADR-010) |
+| ADR-002 (Shared types) | **N/A** | One process, no IPC, types live with the service that owns them |
+| ADR-003 (IPC channel constants) | **N/A** | No IPC layer; service method signatures are the contract |
+| ADR-004 (Auto-archiving) | **Preserved** | `PomodoroStore.runArchiveSweep()` at launch, identical 90-day cutoff |
+| ADR-005 (IPC listener cleanup) | **N/A** | `@Observable` handles teardown; no manual listener bookkeeping |
+| ADR-006 (Hash routing) | **Preserved as enum** | `enum MainRoute { case stats, tracker, settings }` |
+| ADR-007 (Unified edit modal) | **Preserved** | Single SwiftUI sheet for idle + running |
+| ADR-008 (pnpm enforcement) | **N/A** | SwiftPM only, no JS toolchain |
+| ADR-009 (CommandRegistry as unified surface) | **Preserved** | `Core/CommandRegistry.swift`, same shape |
+| ADR-010 (Hotkey default `Cmd+Shift+Space`) | **Preserved** | Same default; `HotKey.swift` reads `cfg.hotkey.palette` |
+| ADR-011 (Ad-hoc codesign via electron-builder) | **Replaced** | Single binary; `xcodebuild` ad-hoc signing handles it correctly. The "deep / inside-out" pitfall doesn't apply |
+| ADR-012 (Homebrew tap) | **Preserved** | Same tap, simpler cask (no per-arch block per SADR-012) |
+| ADR-013 (Palette as panel) | **Preserved** | NSPanel `nonactivatingPanel` (SADR-011) |
+
+---
+
+## See also
+
+[`pitfalls.md`](pitfalls.md) — postmortem of traps the *implementations* of these
+decisions hit. Each pitfall entry is keyed to the decision (or omission) that
+caused it; if you adopt one of these SADRs in a new project, read the
+corresponding pitfall first.

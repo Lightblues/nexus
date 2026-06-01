@@ -1,11 +1,24 @@
-out/
+# macOS
+.DS_Store
+
+# Xcode
+DerivedData/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+
+# XcodeGen — Nexus.xcodeproj is regenerated from project.yml on each build.
+Nexus.xcodeproj/
+
+# Swift Package Manager
+.swiftpm/
+Package.resolved
+
+# Build outputs — build/ is build-mac.sh's staging dir (archive/, export/,
+# dmg-stage/). Nothing in here is tracked anymore (the icon source moved to
+# Resources/icon-source.png).
+build/
+*.app
+*.dSYM
+*.dSYM.zip
+*.dmg
 dist/
-node_modules/
-
-# TypeScript incremental compile cache (per-developer, not portable)
-*.tsbuildinfo
-
-# Global gitignore excludes `build/` directories; re-include the files we
-# actually need in this project (electron-builder expects them here).
-!build/
-!build/*
