@@ -18,6 +18,9 @@ struct MainWindowView: View {
                     sidebarItem(.stats)
                     sidebarItem(.tracker)
                 }
+                Section("Tools") {
+                    sidebarItem(.uploader)
+                }
                 Section("Configuration") {
                     sidebarItem(.settings)
                 }
@@ -51,6 +54,7 @@ struct MainWindowView: View {
         switch route {
         case .stats:    StatsView()
         case .tracker:  TrackerView()
+        case .uploader: UploaderView()
         case .settings: SettingsView()
         }
     }
