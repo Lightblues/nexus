@@ -2,33 +2,37 @@ import SwiftUI
 import AppKit
 import Combine
 
-/// Full uploader UI for the MainWindow. Mirrors UploaderView.tsx:
-///   - drop zone at the top
-///   - selected image preview + compression options
-///   - quality slider + format picker (live re-compression preview)
-///   - path / filename inputs (recent-paths suggestions)
-///   - upload button → CDN URL on clipboard
-///   - recent uploads list at the bottom
+/// Full uploader UI — batch mode (up to 10 images per drop).
 ///
-/// The compression preview is debounced via Combine so dragging the slider
-/// doesn't fire dozens of encodes per second.
+/// Each batch item carries its own filename, compress result, and per-item
+/// upload status. The compression slider/format applies to all items, but we
+/// only re-encode the *active* item live; the others lazily compress on
+/// demand (when you click them, or when Upload All gets to them). This keeps
+/// CPU sane while you're tuning quality with 10 images selected.
+///
+/// Layout (top → bottom):
+///   - drop zone
+///   - thumbnail strip (one button per batch item, shows active + status)
+///   - active item: preview + size delta
+///   - compression controls (quality slider / format picker)
+///   - path + filename inputs
+///   - Upload All button + per-item progress footer
+///   - recent history list
 struct UploaderView: View {
     @EnvironmentObject var service: UploaderService
     @EnvironmentObject var repository: UploaderRepository
     @EnvironmentObject var config: ConfigService
 
-    @State private var image: WorkingImage?
+    @State private var batch: [BatchItem] = []
+    @State private var activeIndex: Int = 0
     @State private var path: String = ""
-    @State private var filename: String = ""
     @State private var quality: Int = 80
     @State private var outputFormat: OutputFormat = .auto
     @State private var showAdvanced: Bool = false
     @State private var uploading: Bool = false
     @State private var message: Message?
 
-    /// Debounce subject for live recompression. Anything mutating
-    /// (image bytes, quality, format) writes to this; subscriber reads it
-    /// 250ms later and re-encodes once.
+    /// Debounce subject for live recompression of the active item only.
     @State private var recompressTrigger = PassthroughSubject<Void, Never>()
     @State private var recompressCancellable: AnyCancellable?
 
@@ -38,23 +42,22 @@ struct UploaderView: View {
             Divider()
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    if !service.isConfigured {
-                        notConfiguredBanner
-                    }
+                    if !service.isConfigured { notConfiguredBanner }
 
                     DropZoneView(
                         disabled: !service.isConfigured || uploading,
-                        onSelect: { data, name in selectImage(data: data, name: name) },
+                        onSelect: { drops in addToBatch(drops) },
                         onPasteClipboard: pasteClipboard
                     )
 
-                    if let img = image {
-                        previewSection(img)
+                    if !batch.isEmpty {
+                        thumbnailStrip
+                        if let active = activeItem {
+                            previewSection(active)
+                        }
                     }
 
-                    if let msg = message {
-                        messageBanner(msg)
-                    }
+                    if let msg = message { messageBanner(msg) }
 
                     Divider().padding(.vertical, 4)
                     historySection
@@ -71,8 +74,9 @@ struct UploaderView: View {
         .onChange(of: service.pendingImage?.filename) { _ in
             consumePendingImage()
         }
-        .onChange(of: quality) { _ in recompressTrigger.send() }
-        .onChange(of: outputFormat) { _ in recompressTrigger.send() }
+        .onChange(of: quality) { _ in invalidateActiveCompress() }
+        .onChange(of: outputFormat) { _ in invalidateActiveCompress() }
+        .onChange(of: activeIndex) { _ in recompressTrigger.send() }
     }
 
     // MARK: - Header
@@ -83,7 +87,20 @@ struct UploaderView: View {
                 .font(.system(size: 16))
             Text("Image Uploader")
                 .font(.system(size: 16, weight: .semibold))
+            if !batch.isEmpty {
+                Text("(\(batch.count) image\(batch.count == 1 ? "" : "s"))")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+            }
             Spacer()
+            if !batch.isEmpty && !uploading {
+                Button(role: .destructive, action: clearBatch) {
+                    Label("Clear", systemImage: "xmark.circle")
+                        .font(.system(size: 11))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -101,26 +118,41 @@ struct UploaderView: View {
         .background(.orange.opacity(0.15), in: RoundedRectangle(cornerRadius: 6))
     }
 
-    // MARK: - Preview + options
+    // MARK: - Thumbnail strip
 
-    @ViewBuilder
-    private func previewSection(_ img: WorkingImage) -> some View {
-        // Preview thumbnail
-        VStack(alignment: .leading, spacing: 8) {
-            previewThumbnail(img)
-            statsLine(img)
-            compressionToggle(img)
-            if showAdvanced {
-                compressionControls
+    private var thumbnailStrip: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(Array(batch.enumerated()), id: \.element.id) { idx, item in
+                    BatchThumbnail(
+                        item: item,
+                        isActive: idx == activeIndex,
+                        onSelect: { activeIndex = idx },
+                        onRemove: uploading ? nil : { removeFromBatch(at: idx) }
+                    )
+                }
             }
-            pathField
-            filenameField
-            uploadButton
+            .padding(.vertical, 4)
         }
     }
 
-    private func previewThumbnail(_ img: WorkingImage) -> some View {
-        let bytes = img.compressed?.data ?? img.originalData
+    // MARK: - Preview section (active item)
+
+    @ViewBuilder
+    private func previewSection(_ item: BatchItem) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            previewThumbnail(item)
+            statsLine(item)
+            compressionToggle()
+            if showAdvanced { compressionControls }
+            pathField
+            filenameField(itemId: item.id)
+            uploadAllButton
+        }
+    }
+
+    private func previewThumbnail(_ item: BatchItem) -> some View {
+        let bytes = item.compressed?.data ?? item.originalData
         return HStack(alignment: .top, spacing: 12) {
             if let nsImg = NSImage(data: bytes) {
                 Image(nsImage: nsImg)
@@ -131,9 +163,9 @@ struct UploaderView: View {
                     .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
             }
             VStack(alignment: .leading, spacing: 4) {
-                Text("\(img.meta.width) × \(img.meta.height)")
+                Text("\(item.meta.width) × \(item.meta.height)")
                     .font(.system(size: 12, weight: .medium))
-                Text((img.compressed?.outputFormat.rawValue ?? img.meta.format.rawValue).uppercased())
+                Text((item.compressed?.outputFormat.rawValue ?? item.meta.format.rawValue).uppercased())
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -141,21 +173,21 @@ struct UploaderView: View {
         }
     }
 
-    private func statsLine(_ img: WorkingImage) -> some View {
+    private func statsLine(_ item: BatchItem) -> some View {
         HStack(spacing: 8) {
-            Text("Original: \(formatBytes(img.originalData.count))")
+            Text("Original: \(formatBytes(item.originalData.count))")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
-            if let c = img.compressed {
+            if let c = item.compressed {
                 Text("→")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                 Text("Compressed: \(formatBytes(c.compressedSize))")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
-                let saved = img.originalData.count - c.compressedSize
+                let saved = item.originalData.count - c.compressedSize
                 if saved > 0 {
-                    Text("(\(percentSaved(img))% smaller)")
+                    Text("(\(percentSaved(item))% smaller)")
                         .font(.system(size: 11))
                         .foregroundStyle(.green)
                 } else {
@@ -163,17 +195,21 @@ struct UploaderView: View {
                         .font(.system(size: 11))
                         .foregroundStyle(.orange)
                 }
+            } else {
+                Text("(compressing…)")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
             }
             Spacer()
         }
     }
 
-    private func compressionToggle(_ img: WorkingImage) -> some View {
+    private func compressionToggle() -> some View {
         Button(action: { showAdvanced.toggle() }) {
             HStack(spacing: 4) {
                 Image(systemName: showAdvanced ? "chevron.down" : "chevron.right")
                     .font(.system(size: 10))
-                Text("Compression")
+                Text("Compression (applies to all)")
                     .font(.system(size: 12))
                 Spacer()
             }
@@ -238,34 +274,49 @@ struct UploaderView: View {
         }
     }
 
-    private var filenameField: some View {
+    /// Filename input for the *active* item only. Editing here updates that
+    /// item's filename in `batch`. (Other items keep their own dedup'd names.)
+    private func filenameField(itemId: UUID) -> some View {
         HStack {
             Text("Filename")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .frame(width: 60, alignment: .leading)
-            TextField("name.png", text: $filename)
-                .textFieldStyle(.roundedBorder)
-                .font(.system(size: 12))
+            TextField("name.png", text: Binding(
+                get: { batch.first(where: { $0.id == itemId })?.filename ?? "" },
+                set: { newName in
+                    if let idx = batch.firstIndex(where: { $0.id == itemId }) {
+                        batch[idx].filename = newName
+                    }
+                }
+            ))
+            .textFieldStyle(.roundedBorder)
+            .font(.system(size: 12))
         }
     }
 
-    private var uploadButton: some View {
+    private var uploadAllButton: some View {
         HStack {
+            if uploading {
+                let done = batch.filter { $0.status.isTerminal }.count
+                Text("Uploading \(done)/\(batch.count)…")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
             Spacer()
-            Button(action: performUpload) {
+            Button(action: uploadAll) {
                 if uploading {
                     HStack(spacing: 4) {
                         ProgressView().controlSize(.small)
                         Text("Uploading…")
                     }
                 } else {
-                    Text("Upload")
-                        .frame(minWidth: 80)
+                    Text(batch.count <= 1 ? "Upload" : "Upload All (\(batch.count))")
+                        .frame(minWidth: 100)
                 }
             }
             .buttonStyle(.borderedProminent)
-            .disabled(uploading || filename.isEmpty || image == nil || !service.isConfigured)
+            .disabled(uploading || batch.isEmpty || !service.isConfigured)
             .keyboardShortcut(.return, modifiers: .command)
         }
     }
@@ -303,20 +354,93 @@ struct UploaderView: View {
         }
     }
 
-    // MARK: - Logic
+    // MARK: - Batch state mutations
 
-    private func selectImage(data: Data, name: String) {
-        do {
-            let meta = try service.meta(data)
-            let baseName = (name as NSString).deletingPathExtension
-            let ext = meta.format == .jpeg ? "jpg" : meta.format.rawValue
-            self.filename = "\(baseName).\(ext)"
-            self.image = WorkingImage(originalData: data, originalName: name, meta: meta, compressed: nil)
-            self.message = nil
-            recompressTrigger.send()
-        } catch {
-            flash("Could not read image: \(error.localizedDescription)", kind: .error)
+    private var activeItem: BatchItem? {
+        guard batch.indices.contains(activeIndex) else { return nil }
+        return batch[activeIndex]
+    }
+
+    /// Add new images to the batch, respecting the maxBatch cap and
+    /// auto-deduping filenames so multi-screenshot drops don't overwrite
+    /// each other on GitHub PUT.
+    private func addToBatch(_ drops: [DropZoneView.DroppedImage]) {
+        guard !drops.isEmpty else { return }
+        let cap = DropZoneView.maxBatch
+        let remaining = max(0, cap - batch.count)
+        if remaining == 0 {
+            flash("Already at \(cap) image limit. Upload or clear first.", kind: .error)
+            return
         }
+        let accepted = drops.prefix(remaining)
+        if drops.count > remaining {
+            flash("Added \(remaining) of \(drops.count) — batch capped at \(cap).", kind: .error)
+        }
+
+        var existingNames = Set(batch.map { $0.filename.lowercased() })
+        var added: [BatchItem] = []
+        for drop in accepted {
+            do {
+                let meta = try service.meta(drop.data)
+                let baseName = (drop.filename as NSString).deletingPathExtension
+                let ext = meta.format == .jpeg ? "jpg" : meta.format.rawValue
+                let firstChoice = "\(baseName).\(ext)"
+                let unique = uniquify(firstChoice, against: &existingNames)
+                let item = BatchItem(
+                    id: UUID(),
+                    originalData: drop.data,
+                    originalName: drop.filename,
+                    filename: unique,
+                    meta: meta,
+                    compressed: nil,
+                    status: .pending
+                )
+                added.append(item)
+            } catch {
+                Log.uploader.error("skipping \(drop.filename): \(error.localizedDescription)")
+            }
+        }
+        let wasEmpty = batch.isEmpty
+        batch.append(contentsOf: added)
+        if wasEmpty { activeIndex = 0 }
+        recompressTrigger.send()
+    }
+
+    private func removeFromBatch(at idx: Int) {
+        guard batch.indices.contains(idx) else { return }
+        batch.remove(at: idx)
+        if batch.isEmpty {
+            activeIndex = 0
+        } else if activeIndex >= batch.count {
+            activeIndex = batch.count - 1
+        }
+    }
+
+    private func clearBatch() {
+        batch.removeAll()
+        activeIndex = 0
+    }
+
+    /// Append `-2`, `-3`, … if `name` already exists in `taken`, then mark
+    /// the chosen name as taken. Case-insensitive (GitHub paths are
+    /// case-sensitive but filesystems often aren't, and users get confused).
+    private func uniquify(_ name: String, against taken: inout Set<String>) -> String {
+        let lower = name.lowercased()
+        if !taken.contains(lower) {
+            taken.insert(lower)
+            return name
+        }
+        let ns = name as NSString
+        let ext = ns.pathExtension
+        let base = ns.deletingPathExtension
+        for n in 2...999 {
+            let candidate = ext.isEmpty ? "\(base)-\(n)" : "\(base)-\(n).\(ext)"
+            if !taken.contains(candidate.lowercased()) {
+                taken.insert(candidate.lowercased())
+                return candidate
+            }
+        }
+        return name   // pathological, give up
     }
 
     private func pasteClipboard() {
@@ -325,12 +449,12 @@ struct UploaderView: View {
             return
         }
         let stamp = Self.timestamp()
-        selectImage(data: data, name: "clipboard-\(stamp).png")
+        addToBatch([(data, "clipboard-\(stamp).png")])
     }
 
     private func consumePendingImage() {
         if let p = service.takePending() {
-            selectImage(data: p.data, name: p.filename)
+            addToBatch([(p.data, p.filename)])
         }
     }
 
@@ -343,7 +467,8 @@ struct UploaderView: View {
         }
     }
 
-    /// Wire up the debounced compression pipeline.
+    // MARK: - Compression pipeline
+
     private func installRecompressPipeline() {
         guard recompressCancellable == nil else { return }
         recompressCancellable = recompressTrigger
@@ -351,23 +476,37 @@ struct UploaderView: View {
             .sink { runCompression() }
     }
 
+    /// Settings (quality / format) changed → invalidate every item's
+    /// compressed result and re-encode the active one. Others will be
+    /// re-encoded lazily when you click them or when Upload All hits them.
+    private func invalidateActiveCompress() {
+        for i in batch.indices { batch[i].compressed = nil }
+        recompressTrigger.send()
+    }
+
     private func runCompression() {
-        guard let img = image else { return }
-        let data = img.originalData
-        let q = quality
-        let f = outputFormat
+        guard let item = activeItem else { return }
+        compressItem(itemID: item.id, quality: quality, format: outputFormat)
+    }
+
+    /// Compress one item and write the result back into `batch`. If the
+    /// item's bytes have since changed (unlikely — we don't currently mutate
+    /// originalData) the result is dropped.
+    private func compressItem(itemID: UUID, quality q: Int, format f: OutputFormat) {
+        guard let idx = batch.firstIndex(where: { $0.id == itemID }) else { return }
+        let data = batch[idx].originalData
         Task.detached(priority: .userInitiated) {
             do {
                 let result = try ImageCompressor.compress(data, quality: q, format: f)
                 await MainActor.run {
-                    guard var current = self.image, current.originalData == data else { return }
-                    current.compressed = result
-                    self.image = current
-                    // If output format changed (auto-pick) re-derive extension
+                    guard let i = batch.firstIndex(where: { $0.id == itemID }) else { return }
+                    batch[i].compressed = result
+                    // If output format changed (auto-pick) reflect it in filename.
                     let ext = result.outputFormat == .jpeg ? "jpg" : result.outputFormat.rawValue
-                    let baseName = (self.filename as NSString).deletingPathExtension
-                    if !baseName.isEmpty {
-                        self.filename = "\(baseName).\(ext)"
+                    let baseName = (batch[i].filename as NSString).deletingPathExtension
+                    let currentExt = (batch[i].filename as NSString).pathExtension.lowercased()
+                    if !baseName.isEmpty, currentExt != ext {
+                        batch[i].filename = "\(baseName).\(ext)"
                     }
                 }
             } catch {
@@ -378,43 +517,101 @@ struct UploaderView: View {
         }
     }
 
-    private func performUpload() {
-        guard let img = image, let compressed = img.compressed else {
-            flash("Image not ready yet — wait for compression.", kind: .error)
-            return
-        }
+    // MARK: - Upload
+
+    private func uploadAll() {
+        guard !batch.isEmpty else { return }
         uploading = true
         message = nil
-        let bytes = compressed.data
-        let outFormat = compressed.outputFormat
+
+        let q = quality
+        let f = outputFormat
         let pathValue = path
-        let nameValue = filename
-        let metaValue = ImageMeta(
-            format: outFormat,
-            width: compressed.width,
-            height: compressed.height,
-            hasAlpha: img.meta.hasAlpha
-        )
-        let originalData = img.originalData
+
         Task {
-            do {
-                _ = try await service.upload(
-                    originalData: originalData,
-                    compressedData: bytes,
-                    meta: metaValue,
-                    outputFormat: outFormat,
-                    filename: nameValue,
-                    path: pathValue
+            var failures: [(String, String)] = []
+            for itemID in batch.map(\.id) {
+                // Mark uploading
+                if let idx = batch.firstIndex(where: { $0.id == itemID }) {
+                    batch[idx].status = .uploading
+                }
+
+                // Make sure we have a compressed result. If not, encode now
+                // (this is the "lazy" path for items the user never clicked).
+                if let idx = batch.firstIndex(where: { $0.id == itemID }),
+                   batch[idx].compressed == nil {
+                    do {
+                        let data = batch[idx].originalData
+                        let result = try ImageCompressor.compress(data, quality: q, format: f)
+                        batch[idx].compressed = result
+                        // Sync extension if auto-pick changed format.
+                        let ext = result.outputFormat == .jpeg ? "jpg" : result.outputFormat.rawValue
+                        let baseName = (batch[idx].filename as NSString).deletingPathExtension
+                        let currentExt = (batch[idx].filename as NSString).pathExtension.lowercased()
+                        if !baseName.isEmpty, currentExt != ext {
+                            batch[idx].filename = "\(baseName).\(ext)"
+                        }
+                    } catch {
+                        if let idx2 = batch.firstIndex(where: { $0.id == itemID }) {
+                            batch[idx2].status = .failed(error.localizedDescription)
+                        }
+                        failures.append((batch[idx].filename, error.localizedDescription))
+                        continue
+                    }
+                }
+
+                // Snapshot the values we need outside the index.
+                guard let idx = batch.firstIndex(where: { $0.id == itemID }),
+                      let compressed = batch[idx].compressed
+                else { continue }
+                let item = batch[idx]
+
+                let metaValue = ImageMeta(
+                    format: compressed.outputFormat,
+                    width: compressed.width,
+                    height: compressed.height,
+                    hasAlpha: item.meta.hasAlpha
                 )
-                self.image = nil
-                self.filename = ""
-                self.flash("Uploaded — URL copied to clipboard.", kind: .success)
-            } catch {
-                self.flash("Upload failed: \(error.localizedDescription)", kind: .error)
+                do {
+                    _ = try await service.upload(
+                        originalData: item.originalData,
+                        compressedData: compressed.data,
+                        meta: metaValue,
+                        outputFormat: compressed.outputFormat,
+                        filename: item.filename,
+                        path: pathValue
+                    )
+                    if let i = batch.firstIndex(where: { $0.id == itemID }) {
+                        batch[i].status = .uploaded
+                    }
+                } catch {
+                    if let i = batch.firstIndex(where: { $0.id == itemID }) {
+                        batch[i].status = .failed(error.localizedDescription)
+                    }
+                    failures.append((item.filename, error.localizedDescription))
+                }
             }
-            self.uploading = false
+
+            uploading = false
+            // Final summary message + auto-clear successes if nothing failed.
+            let total = batch.count
+            let okCount = batch.filter { $0.status == .uploaded }.count
+            if failures.isEmpty {
+                flash("Uploaded \(okCount) image\(okCount == 1 ? "" : "s") — last URL on clipboard.", kind: .success)
+                // Clear the batch only when everything succeeded — leaves
+                // failed items in place for retry.
+                batch.removeAll()
+                activeIndex = 0
+            } else {
+                let summary = "Uploaded \(okCount)/\(total). \(failures.count) failed: " +
+                              failures.prefix(2).map(\.0).joined(separator: ", ") +
+                              (failures.count > 2 ? "…" : "")
+                flash(summary, kind: .error)
+            }
         }
     }
+
+    // MARK: - Helpers
 
     private func flash(_ text: String, kind: Message.Kind) {
         message = Message(text: text, kind: kind)
@@ -437,11 +634,7 @@ struct UploaderView: View {
         .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
     }
 
-    // MARK: - Helpers
-
     private var visibleFormats: [OutputFormat] {
-        // Hide WebP if ImageIO can't encode it on this OS — encoding will
-        // fall back to PNG anyway, but the picker should reflect reality.
         ImageCompressor.webpEncodeSupported
             ? OutputFormat.allCases
             : OutputFormat.allCases.filter { $0 != .webp }
@@ -454,9 +647,9 @@ struct UploaderView: View {
         return f.string(fromByteCount: Int64(bytes))
     }
 
-    private func percentSaved(_ img: WorkingImage) -> Int {
-        guard let c = img.compressed, img.originalData.count > 0 else { return 0 }
-        return Int(round(Double(img.originalData.count - c.compressedSize) / Double(img.originalData.count) * 100))
+    private func percentSaved(_ item: BatchItem) -> Int {
+        guard let c = item.compressed, item.originalData.count > 0 else { return 0 }
+        return Int(round(Double(item.originalData.count - c.compressedSize) / Double(item.originalData.count) * 100))
     }
 
     private static func timestamp() -> String {
@@ -466,13 +659,102 @@ struct UploaderView: View {
     }
 }
 
-/// Bundle of "image being worked on" — original bytes + meta + latest
-/// compressed result. `compressed` is nil while encoding.
-private struct WorkingImage: Equatable {
+/// One image staged in the batch. `compressed` is filled lazily — nil until
+/// either (a) user makes this the active item, or (b) Upload All gets to it.
+private struct BatchItem: Identifiable, Equatable {
+    let id: UUID
     let originalData: Data
     let originalName: String
+    var filename: String
     let meta: ImageMeta
     var compressed: CompressResult?
+    var status: BatchStatus
+}
+
+private enum BatchStatus: Equatable {
+    case pending
+    case uploading
+    case uploaded
+    case failed(String)
+
+    var isTerminal: Bool {
+        switch self {
+        case .uploaded, .failed: return true
+        case .pending, .uploading: return false
+        }
+    }
+}
+
+/// One thumbnail in the horizontal strip. Shows status badge in corner +
+/// remove button on hover. Click → make active.
+private struct BatchThumbnail: View {
+    let item: BatchItem
+    let isActive: Bool
+    let onSelect: () -> Void
+    /// nil → don't show remove button (e.g. mid-upload).
+    let onRemove: (() -> Void)?
+
+    @State private var hovering = false
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            Button(action: onSelect) {
+                ZStack(alignment: .bottomTrailing) {
+                    if let nsImg = NSImage(data: item.originalData) {
+                        Image(nsImage: nsImg)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 64, height: 64)
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                    } else {
+                        Rectangle().fill(.tertiary)
+                            .frame(width: 64, height: 64)
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                    }
+                    statusBadge
+                        .padding(4)
+                }
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .strokeBorder(isActive ? Color.accentColor : Color.clear, lineWidth: 2)
+                )
+            }
+            .buttonStyle(.plain)
+            .help(item.filename)
+
+            if hovering, let onRemove {
+                Button(action: onRemove) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 14))
+                        .foregroundStyle(.white, .black.opacity(0.6))
+                }
+                .buttonStyle(.plain)
+                .padding(2)
+            }
+        }
+        .onHover { hovering = $0 }
+    }
+
+    @ViewBuilder
+    private var statusBadge: some View {
+        switch item.status {
+        case .pending:
+            EmptyView()
+        case .uploading:
+            ProgressView()
+                .controlSize(.small)
+                .padding(3)
+                .background(.black.opacity(0.5), in: Circle())
+        case .uploaded:
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(.white, .green)
+                .font(.system(size: 14))
+        case .failed:
+            Image(systemName: "exclamationmark.circle.fill")
+                .foregroundStyle(.white, .red)
+                .font(.system(size: 14))
+        }
+    }
 }
 
 private struct Message: Equatable {
