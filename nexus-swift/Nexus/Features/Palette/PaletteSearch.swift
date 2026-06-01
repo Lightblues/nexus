@@ -29,7 +29,7 @@ enum PaletteSearch {
     }
 
     private static func total(cmd: Command, needle: String) -> Double {
-        let titleScore    = field(cmd.title.lowercased(), needle: needle) * 1.0
+        let titleScore    = field(cmd.title().lowercased(), needle: needle) * 1.0
         let groupScore    = (cmd.group?.lowercased()).map { field($0, needle: needle) * 0.7 } ?? 0
         let keywordScore  = cmd.keywords
             .map { field($0.lowercased(), needle: needle) * 0.5 }

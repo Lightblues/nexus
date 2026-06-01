@@ -45,13 +45,29 @@ SRC="$MOUNT/Nexus.app"
 # Quit any running Nexus first — `cp -R` over a running .app bundle on the
 # same volume can succeed but leave the running process pointing at orphaned
 # pages; quitting first is the safe path.
+#
+# We match BOTH the installed bundle AND the Xcode DerivedData debug build,
+# because if you previously ran `cmd-R` in Xcode, that process is still alive
+# in the menu bar and steals the bundle id slot from the freshly-installed
+# Release build (same `site.easonsi.nexus` ⇒ second instance silently exits).
 echo "==> Quitting running Nexus (if any)"
 pkill -f "/Applications/Nexus.app/Contents/MacOS/Nexus" 2>/dev/null || true
+pkill -f "DerivedData/Nexus-.*/Build/Products/.*/Nexus.app/Contents/MacOS/Nexus" 2>/dev/null || true
 # Wait briefly for graceful exit
 for _ in 1 2 3 4 5; do
-  pgrep -f "/Applications/Nexus.app/Contents/MacOS/Nexus" >/dev/null 2>&1 || break
+  pgrep -f "Nexus.app/Contents/MacOS/Nexus" >/dev/null 2>&1 || break
   sleep 0.3
 done
+# If something's still running, it's almost certainly an Xcode debug session
+# holding the process under lldb. Warn explicitly — kill -9 won't work there.
+if pgrep -f "DerivedData/Nexus-.*/Build/Products/.*/Nexus.app/Contents/MacOS/Nexus" >/dev/null 2>&1; then
+  echo ""
+  echo "⚠️  An Xcode-launched Debug build of Nexus is still running and lldb is"
+  echo "    holding it. The /Applications/Nexus.app you just installed will not"
+  echo "    take over the menu bar slot until you stop the Xcode session."
+  echo "    → In Xcode, press ⌘. (or Product → Stop), then re-run this script."
+  echo ""
+fi
 
 # Replace the bundle.
 DEST="/Applications/Nexus.app"

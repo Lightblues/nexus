@@ -10,6 +10,14 @@ struct PaletteView: View {
     @State private var query: String = ""
     @State private var selection: Int = 0
     @FocusState private var searchFocused: Bool
+    /// Last input device used to move selection. Set to `.keyboard` on ↑↓ /
+    /// query change; set to `.mouse` on real cursor motion. Hover-to-select
+    /// only fires while in `.mouse` mode — this is the Spotlight/Raycast trick
+    /// to stop a stationary cursor from snapping selection back to itself
+    /// after the user presses an arrow key.
+    @State private var lastInput: InputKind = .mouse
+
+    private enum InputKind { case keyboard, mouse }
 
     let onDismiss: () -> Void
 
@@ -45,7 +53,10 @@ struct PaletteView: View {
             selection = 0
             searchFocused = true
         }
-        .onChange(of: query) { _ in selection = 0 }
+        .onChange(of: query) { _ in
+            selection = 0
+            lastInput = .keyboard
+        }
         // Hidden buttons own keyboard shortcuts. SwiftUI's macOS-13 .onKeyPress
         // doesn't exist; this is the standard workaround.
         .background(keyboardCommands)
@@ -76,21 +87,40 @@ struct PaletteView: View {
                 LazyVStack(spacing: 0) {
                     ForEach(Array(matches.enumerated()), id: \.element.id) { idx, cmd in
                         CommandRow(cmd: cmd, isSelected: idx == selection)
-                            .id(idx)
                             .contentShape(Rectangle())
                             .onTapGesture {
                                 selection = idx
                                 runSelected()
                             }
                             .onHover { hovering in
-                                if hovering { selection = idx }
+                                // Only honor hover while the user is actually
+                                // driving with the mouse. Right after a ↑↓
+                                // keystroke we're in keyboard mode — a
+                                // stationary cursor sitting on a row would
+                                // otherwise re-fire onHover during the
+                                // post-keystroke re-render and yank selection
+                                // back to that row. Once the cursor *moves*
+                                // (TrackingArea below), we flip back to mouse
+                                // mode and hover takes over again.
+                                guard hovering, lastInput == .mouse else { return }
+                                selection = idx
                             }
                     }
                 }
+                // A 1×1 NSView that watches for actual mouse-motion events
+                // and flips us back to mouse mode. SwiftUI's onHover doesn't
+                // distinguish "cursor entered area" from "cursor moved" — we
+                // need the latter to know the user has resumed mouse driving
+                // after using the keyboard.
+                .background(
+                    MouseMotionDetector { lastInput = .mouse }
+                        .allowsHitTesting(false)
+                )
             }
             .frame(maxHeight: 320)
             .onChange(of: selection) { newValue in
-                proxy.scrollTo(newValue, anchor: .center)
+                guard matches.indices.contains(newValue) else { return }
+                proxy.scrollTo(matches[newValue].id, anchor: .center)
             }
         }
     }
@@ -168,6 +198,7 @@ struct PaletteView: View {
 
     private func moveSelection(by delta: Int) {
         guard !matches.isEmpty else { return }
+        lastInput = .keyboard
         let next = selection + delta
         if next < 0 { selection = matches.count - 1 }
         else if next >= matches.count { selection = 0 }
@@ -195,7 +226,7 @@ private struct CommandRow: View {
                 .font(.system(size: 13))
                 .frame(width: 18)
             VStack(alignment: .leading, spacing: 2) {
-                Text(cmd.title)
+                Text(cmd.title())
                     .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
                     .foregroundStyle(isSelected ? Color.accentColor : .primary)
                 if let sub = cmd.subtitle() {
@@ -227,5 +258,42 @@ private struct CommandRow: View {
         if cmd.id.hasPrefix("window.")   { return "macwindow" }
         if cmd.id.hasPrefix("app.")      { return "gearshape" }
         return "command"
+    }
+}
+
+/// Reports any actual mouse-motion event (not just enter/exit) inside its
+/// bounds. SwiftUI's `.onHover` only fires on enter/exit, so a stationary
+/// cursor and a moving one look identical to it — we need the real motion
+/// signal to know the user has resumed mouse driving after using the keyboard.
+private struct MouseMotionDetector: NSViewRepresentable {
+    let onMove: () -> Void
+
+    func makeNSView(context: Context) -> Tracker {
+        Tracker(onMove: onMove)
+    }
+    func updateNSView(_ nsView: Tracker, context: Context) {
+        nsView.onMove = onMove
+    }
+
+    final class Tracker: NSView {
+        var onMove: () -> Void
+        init(onMove: @escaping () -> Void) {
+            self.onMove = onMove
+            super.init(frame: .zero)
+        }
+        required init?(coder: NSCoder) { fatalError() }
+
+        override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+            for area in trackingAreas { removeTrackingArea(area) }
+            let area = NSTrackingArea(
+                rect: bounds,
+                options: [.mouseMoved, .activeAlways, .inVisibleRect],
+                owner: self,
+                userInfo: nil
+            )
+            addTrackingArea(area)
+        }
+        override func mouseMoved(with event: NSEvent) { onMove() }
     }
 }
