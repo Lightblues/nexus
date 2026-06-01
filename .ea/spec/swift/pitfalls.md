@@ -251,6 +251,95 @@ The local monitor's `event.window === self.panel` check is the linchpin —
 without it, *every* click inside the palette (including selecting an item)
 fires the dismiss.
 
+### 3.4 Menu-bar popover dragging MainWindow forward
+
+**Symptom**: User in vscode (focused on A monitor). Click Nexus menu-bar icon
+on B monitor → popover appears, but Nexus's MainWindow on A monitor is
+yanked to the foreground, stealing vscode's focus.
+
+**Root cause**: `togglePopover()` called `NSApp.activate(ignoringOtherApps: true)`
+right after `popover.show(...)`, "so SwiftUI text fields in the editor sheet
+can take key focus". But `NSApp.activate` is a **process-level** operation —
+it raises *all* of Nexus's windows to front, not just the popover. Combined
+with `MainWindowController` setting activation policy to `.regular` while
+MainWindow is open (for cmd-tab to behave normally), every popover open
+becomes "treat Nexus like a regular foreground app", dragging the visible
+MainWindow forward.
+
+**Fix**: Decouple activation from popover visibility. The popover itself
+doesn't need app activation — buttons (Start/Pause/Finish/Exit) work fine
+without it. Only activate when actually needed (the edit-session sheet's
+TextFields). Move the `NSApp.activate` call from `togglePopover()` into the
+edit button's action:
+
+```swift
+// AppDelegate.togglePopover — drop the activate call entirely
+pop.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+installClickOutsideMonitor()
+
+// PomodoroPopoverView edit-button action — activate just-in-time
+Button(action: {
+    NSApp.activate(ignoringOtherApps: true)
+    showEditor = true
+}) { ... }
+```
+
+**Lesson**: `NSApp.activate(ignoringOtherApps: true)` is process-level
+nuclear option. For menubar apps where popover ≠ "user wants the whole app
+foregrounded", call activate only at the precise moment a key window needs
+focus, and never preventively.
+
+### 3.5 Palette keyboard nav vs. mouse hover deadlock
+
+**Symptom**: Open palette, hover mouse over row 2, press ↓ — selection
+appears to move to row 3 then **snaps back to row 2 immediately**. Keyboard
+navigation effectively dead anywhere the mouse is parked.
+
+**Root cause**: Naïve `.onHover { hovering in if hovering { selection = idx } }`
+on every row. When ↓ moves selection from row 2 to row 3, both rows
+re-render (isSelected changed). SwiftUI's `.onHover` re-fires `hovering=true`
+during the re-render for whichever row the cursor is sitting on (it doesn't
+distinguish "cursor entered area" from "cursor stayed in area through
+re-render"). That fires `selection = 2` and undoes the keystroke.
+
+**Fix**: Track which input device drove the last selection change.
+Hover-to-select only fires while in `.mouse` mode. Real cursor *motion*
+(via `NSTrackingArea` `.mouseMoved`, NOT SwiftUI's enter/exit-only `onHover`)
+flips back to `.mouse` mode:
+
+```swift
+@State private var lastInput: InputKind = .mouse
+private enum InputKind { case keyboard, mouse }
+
+// onHover guard
+.onHover { hovering in
+    guard hovering, lastInput == .mouse else { return }
+    selection = idx
+}
+// ↑↓ + query change set lastInput = .keyboard
+// MouseMotionDetector (NSViewRepresentable wrapping NSTrackingArea) sets
+// lastInput = .mouse on real motion events.
+```
+
+This is what Spotlight/Raycast/Alfred all do — the pattern is the standard
+"cursor was where the keyboard left off; respect that until the user
+actually moves the mouse."
+
+**Bonus**: Don't double-key your `ForEach` rows. We had:
+
+```swift
+ForEach(Array(matches.enumerated()), id: \.element.id) { idx, cmd in
+    CommandRow(cmd: cmd, isSelected: idx == selection)
+        .id(idx)         // ❌ second identity, fights with ForEach's
+}
+```
+
+`.id(idx)` overrides ForEach's identity with an int that *doesn't* change
+when matches list mutates. SwiftUI then reuses cells positionally and shows
+stale views. Use ForEach's identity (the element's stable id) and drop
+`.id()`. If `ScrollViewReader.scrollTo(...)` was using `idx`, switch it to
+`matches[idx].id`.
+
 ---
 
 ## 4. Tooling-layer paper cuts
@@ -300,9 +389,45 @@ Events on every existing user — and broken Mackup's bundle-ID-keyed prefs.
 icon, copy) is fine; the underlying CFBundleIdentifier never changes. See
 SADR-001.
 
+### 4.4 "Same bundle id" silently masks freshly-installed builds
+
+**Symptom (cost us ~2 hours)**: Run `install-local.sh`, see "✓ Installed",
+open the app, see broken UI that *doesn't match the source code on disk*.
+Edit + reinstall, still broken in the same way. Conclusion: "code bug,
+investigate further" — actually the new build was never running.
+
+**Root cause**: macOS allows only one running instance per bundle id. If an
+older build is already running (typically the **Xcode-launched Debug build**
+at `~/Library/Developer/Xcode/DerivedData/.../Nexus.app`), a freshly-launched
+copy of `/Applications/Nexus.app` sees its bundle slot taken and **silently
+exits**. There's no error, no log, no menubar visual change — the user's
+"after install" UI is still driven by the stale Xcode-launched binary. And
+because Xcode's lldb is holding the Debug process, even `kill -9` on it from
+a script does nothing; it's stopped (`SX` state) but not gone.
+
+**Fix**: `install-local.sh` now kills both `/Applications/Nexus.app/...`
+*and* `DerivedData/Nexus-.*/Build/Products/.*/Nexus.app/...`, then warns
+explicitly if anything is still alive after the wait — pointing the user at
+"press ⌘. in Xcode" rather than scratching their head.
+
+```bash
+pkill -f "/Applications/Nexus.app/Contents/MacOS/Nexus" || true
+pkill -f "DerivedData/Nexus-.*/Build/Products/.*/Nexus.app/Contents/MacOS/Nexus" || true
+# wait a beat, then:
+if pgrep -f "DerivedData/Nexus-.*Nexus.app/Contents/MacOS/Nexus" >/dev/null; then
+  echo "⚠️  Xcode is holding a Debug build under lldb. ⌘. in Xcode, then re-run."
+fi
+```
+
+**Lesson** (this is the meta-lesson we cared about): when the user reports
+"I clicked, behavior is wrong", **before** debugging the code — verify
+*which binary they're actually looking at*. `ps aux | grep Nexus.app` and
+the binary path it's running is a 2-second sanity check that prevents
+arbitrarily long debugging on a build that doesn't exist anymore.
+
 ---
 
-## 5. Two meta-lessons
+## 5. Three meta-lessons
 
 1. **Local Xcode ≠ CI Xcode. Build defensively from day one.** The
    `objectVersion` patch and `STRICT_CONCURRENCY=minimal` should be the *first*
@@ -318,4 +443,26 @@ SADR-001.
      into Swift 6 mode
    - assume the *older* compiler in CI is the gating one — write to its rules
 
-These two together prevented ~80% of the back-and-forth on this migration.
+3. **When a UI bug "doesn't match the code", verify the running binary first.**
+   The expensive trap of this migration was spending ~2 hours debugging a
+   palette UI bug that turned out to be a stale Xcode-launched Debug build
+   masking the freshly-installed Release build (§4.4). The right debug
+   sequence — applied any time a user says "the change didn't take" — is:
+
+   1. **`ps aux | grep Nexus.app | grep -v grep`** — what process(es) are
+      actually running, and from which path? `/Applications/...` ≠
+      `DerivedData/...` ≠ a debug attach holding `.SX` state.
+   2. **Check binary mtime + log timestamps** — does the running binary's
+      file mtime match a recent build? Does the log show a `launched` entry
+      *after* the install?
+   3. **Read the log for evidence**, not assumptions — does the bootstrap
+      sequence match what the source code says it should do? (We added
+      `registry: appended <id>` log lines and instantly proved the registry
+      was correct, redirecting attention to the SwiftUI render layer.)
+   4. **Only then** start reading code or guessing at logic.
+
+   This sequence is cheap (seconds) and routinely saves hours. The
+   `install-local.sh` script now contains the protections + warnings that
+   make Step 1 reliable.
+
+These three together prevented ~80% of the back-and-forth on this migration.

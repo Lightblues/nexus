@@ -72,10 +72,8 @@ final class CommandRegistry: ObservableObject {
         // Replace if same id already registered (idempotent across reloads).
         if let idx = commands.firstIndex(where: { $0.id == command.id }) {
             commands[idx] = command
-            Log.app.info("registry: replaced \(command.id) (count=\(commands.count))")
         } else {
             commands.append(command)
-            Log.app.info("registry: appended \(command.id) (count=\(commands.count))")
         }
     }
 
