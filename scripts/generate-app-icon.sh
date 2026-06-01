@@ -4,7 +4,7 @@
 # them.
 #
 # Usage:
-#   ./scripts/generate-app-icon.sh                     # uses ../build/icon.png
+#   ./scripts/generate-app-icon.sh                     # uses ./build/icon.png
 #   ./scripts/generate-app-icon.sh path/to/source.png  # custom source
 #
 # Source image must be ≥ 1024×1024 PNG. We use macOS's `sips` (pre-installed,
@@ -14,8 +14,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-REPO_ROOT="$(cd "$PROJECT_DIR/.." && pwd)"
-SRC="${1:-$REPO_ROOT/build/icon.png}"
+SRC="${1:-$PROJECT_DIR/build/icon.png}"
 DEST="$PROJECT_DIR/Nexus/Resources/Assets.xcassets/AppIcon.appiconset"
 
 [[ -f "$SRC" ]] || { echo "Source icon not found: $SRC"; exit 1; }

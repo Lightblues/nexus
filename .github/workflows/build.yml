@@ -14,9 +14,6 @@ on:
 jobs:
   build:
     runs-on: macos-14   # Apple Silicon runner — fastest archive + universal output
-    defaults:
-      run:
-        working-directory: nexus-swift
     steps:
       - uses: actions/checkout@v5
 
@@ -48,7 +45,7 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: Nexus-dmg
-          path: nexus-swift/dist/Nexus-*.dmg
+          path: dist/Nexus-*.dmg
           if-no-files-found: error
           retention-days: 30
 
