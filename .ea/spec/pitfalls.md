@@ -371,9 +371,81 @@ stale views. Use ForEach's identity (the element's stable id) and drop
 `.id()`. If `ScrollViewReader.scrollTo(...)` was using `idx`, switch it to
 `matches[idx].id`.
 
----
+### 3.6 SwiftUI Settings scene races AppDelegate.bootstrap
 
-## 4. Tooling-layer paper cuts
+**Symptom**: v1.2.1 launched fine on the developer machine but crashed on
+`/Applications/Nexus.app/Contents/MacOS/Nexus` when installed via `brew
+upgrade`. The crash signature in stderr:
+
+```
+Nexus/MainWindowController.swift:46: Fatal error: MainWindowController: environment not attached
+```
+
+— from `makeWindow()`'s `guard let env = environment else { fatalError(...) }`.
+
+**Root cause**: SwiftUI's `Settings { ... }` scene declared in `NexusApp.body`
+is mounted **as part of the very first SwiftUI commit pass**, which runs
+during `NSApp` startup. The `SettingsTrampoline` view's `.onAppear` calls
+`appDelegate.environment.mainWindow.show(route: .settings)` *before* the
+`Task { @MainActor in await environment.bootstrap() }` dispatched from
+`applicationDidFinishLaunching` has executed its synchronous prefix.
+
+`AppEnvironment.bootstrap()` had `mainWindow.attach(environment: self)`
+buried after several `await` hops (catalog migration, repository refresh,
+etc.). On a cold cache the SwiftUI dispatch wins; the trampoline calls
+`show()` → `makeWindow()` → `environment` is still nil → fatalError.
+
+The race had been latent since v1.0.0; v1.2.0 introduced
+`SettingsTrampoline.onAppear → mainWindow.show()` and exposed it. The
+trampoline is the *only* code path that calls `mainWindow.show()` before
+user interaction.
+
+**Fix — two layers**:
+
+1. **Hoist sync wiring above any `await`**:
+   ```swift
+   func bootstrap() async {
+       // FIRST — before any await — wire up singletons that
+       // hold AppEnvironment back-references.
+       mainWindow.attach(environment: self)
+       palette.attach(environment: self)
+
+       config.bootstrap()
+       notifier.setup()
+       await CatalogMigration.runIfNeeded(db: database)
+       // ...
+   }
+   ```
+   These attach calls don't need `await`; the only reason they were at the
+   bottom was alphabetic accident.
+
+2. **Belt-and-suspenders `show()` race guard**:
+   ```swift
+   func show() {
+       guard environment != nil else {
+           DispatchQueue.main.async { [weak self] in self?.show() }
+           return
+       }
+       // ...existing code
+   }
+   ```
+   If a future code path beats the bootstrap synchronously again, we
+   defer one runloop tick instead of fatalError-ing.
+
+**General rule**: anything dispatched from `App.body` Scenes (SwiftUI's
+sync mount path) can run before `applicationDidFinishLaunching`'s `Task`
+gets its first `await` hop. Singletons reachable from those Scenes must
+be wired up either in `AppEnvironment.init` (before `bootstrap()` runs)
+or as the synchronous prefix of `bootstrap()`. Anything that requires
+`await` ordering needs its own race guard at the call site.
+
+**Why developer machine masked the crash**: incremental dev builds had
+warm caches and a slightly different Task-scheduler timing than a
+freshly-mounted brew DMG on first launch. The race surfaced on cold-cache
+launches, not consistently on dev cycles. Conclusion: "I tested locally"
+is not signal for launch-time races; cold-cache install-from-DMG is.
+
+---
 
 ### 4.1 Edit tool duplicated content
 

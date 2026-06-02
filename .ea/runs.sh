@@ -28,3 +28,5 @@ brew tap --force lightblues/tap
 brew info --cask lightblues/tap/nexus
 brew update                              # 1. 拉最新 cask 定义
 brew upgrade --cask lightblues/tap/nexus  # 2. 对比版本，下载新包
+
+brew update && brew upgrade --cask nexus
