@@ -164,7 +164,9 @@ final class PomodoroService: ObservableObject {
                 // disrupted (no candidate-window / composition state loss).
                 let cfg = NSWorkspace.OpenConfiguration()
                 cfg.activates = false
-                NSWorkspace.shared.open(url, configuration: cfg)
+                // Best-effort: if Raycast isn't installed the launch fails — we
+                // don't want to surface that as a Pomodoro error, so swallow it.
+                _ = try? await NSWorkspace.shared.open(url, configuration: cfg)
             }
         }
 

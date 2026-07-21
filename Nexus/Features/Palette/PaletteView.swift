@@ -120,6 +120,14 @@ struct PaletteView: View {
             .frame(maxHeight: 320)
             .onChange(of: selection) { newValue in
                 guard matches.indices.contains(newValue) else { return }
+                // Only programmatically scroll for keyboard navigation. When
+                // the user is driving with the mouse (hover-to-select or
+                // trackpad scroll), the selected row is already under the
+                // cursor and visible — scrollTo here would fight the user's
+                // own scroll gesture and cause jank. (query reset also sets
+                // lastInput = .keyboard, so the scroll-to-top on new search
+                // still works.)
+                guard lastInput == .keyboard else { return }
                 proxy.scrollTo(matches[newValue].id, anchor: .center)
             }
         }
