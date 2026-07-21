@@ -158,7 +158,13 @@ final class PomodoroService: ObservableObject {
 
         if config.config.pomodoro.confettiOnComplete && kind == .work {
             if let url = URL(string: "raycast://confetti") {
-                NSWorkspace.shared.open(url)
+                // Mirror the legacy Electron `open -g` behavior: launch the
+                // Raycast confetti deeplink WITHOUT activating Raycast, so the
+                // user's current app keeps key focus and the active IME is not
+                // disrupted (no candidate-window / composition state loss).
+                let cfg = NSWorkspace.OpenConfiguration()
+                cfg.activates = false
+                NSWorkspace.shared.open(url, configuration: cfg)
             }
         }
 
