@@ -1,0 +1,8 @@
+# forge repository defaults. Issue frontmatter overrides these; CLI flags override both.
+prefix: nexus
+delivery: none   # applied when an issue reaches done: none | commit (current branch) | push (commit, then push)
+review: false    # true: a finished issue waits in review/ until you confirm; the agent then closes it (forge-close)
+# unattended: true # create the agent with Auto Accept; false leaves permission prompts for you
+# provider: cursor
+# mode: default
+# host: local
