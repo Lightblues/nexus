@@ -1,7 +1,7 @@
 import Foundation
 
 /// Mirrors `config.json` schema. See ../resources/default-config.json or
-/// ../.ea/spec/swift/architecture.md.
+/// ../.ea/docs/swift/architecture.md.
 ///
 /// All structs use Codable with explicit `init(from:)` so that *any* missing field
 /// falls back to its default value. This means hand-edited config.json files

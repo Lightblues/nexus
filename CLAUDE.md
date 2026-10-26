@@ -13,7 +13,7 @@ archived at the `legacy/electron` git tag.
 - **Release**: bump `CFBundleShortVersionString` in `project.yml`, tag `nexus-vX.Y.Z`, push → CI builds DMG, creates GitHub Release, bumps Homebrew cask
 - **Bundle ID**: `site.easonsi.nexus` (frozen — Mackup + AX permission continuity)
 - **Data**: `~/Library/Application Support/site.easonsi.nexus/` (config + db); `~/Library/Caches/...` (thumbnails); `~/Library/Logs/...` (main.log). v1.2.0 migration: run `./scripts/migrate-data-v1.2.0.sh` once before first launch on the new layout. See SADR-015.
-- **Spec**: `.ea/spec/` (active spec — `spec.md` is the index). `.ea/spec/legacy-electron/` holds two preserved Electron-era files (architecture, decisions) for SADR cross-reference. Full Electron sources at the `legacy/electron` git tag.
+- **Spec**: `.ea/docs/` (active spec — `spec.md` is the index). `.ea/docs/legacy-electron/` holds two preserved Electron-era files (architecture, decisions) for SADR cross-reference. Full Electron sources at the `legacy/electron` git tag.
 
 ## Coding Style
 - Compact and type-hinted
@@ -28,5 +28,6 @@ archived at the `legacy/electron` git tag.
 - Swift mode: 5.9, strict concurrency `minimal` (Xcode 15 CI compat)
 
 ## Git
-- NEVER use `git commit` directly — code must be reviewed first
+- Commit finished work yourself once its checks pass (build and tests as relevant), one commit per logical change in the repository's commit style, then push `main`. No separate review step is needed.
+- Forge issues: `.ea/issues/` is synced by the forge server and is not committed.
 - Only use `gh` CLI tools after user approval

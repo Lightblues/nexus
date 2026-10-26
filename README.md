@@ -3,7 +3,7 @@
 Native macOS menu bar toolkit — Pomodoro timer, time tracker, image uploader,
 command palette. Single-binary AppKit + SwiftUI app, ad-hoc signed.
 
-See [`.ea/spec/swift/`](.ea/spec/swift/) for the full architecture and decision
+See [`.ea/docs/swift/`](.ea/docs/swift/) for the full architecture and decision
 log. The Electron-based predecessor is preserved at the `legacy/electron` git
 tag.
 
@@ -39,7 +39,7 @@ in the right folder, re-run `xcodegen generate`.
 
 ## Directory layout
 
-Mirrors [`.ea/spec/swift/architecture.md`](.ea/spec/swift/architecture.md):
+Mirrors [`.ea/docs/swift/architecture.md`](.ea/docs/swift/architecture.md):
 
 ```
 Nexus/
