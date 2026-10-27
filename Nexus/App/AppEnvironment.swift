@@ -87,13 +87,14 @@ final class AppEnvironment: ObservableObject {
         URLSchemeHandler.shared.install()
 
         // Global hotkey for the palette. Re-bound below on config change.
-        installHotkey()
-        // Re-install on config.hotkey.palette change.
+        installHotkey(config.config.hotkey.palette)
+        // Re-install on config.hotkey.palette change. `$config` emits before the
+        // property is set, so use the emitted value, not `config.config`.
         config.$config
             .map(\.hotkey.palette)
             .removeDuplicates()
             .dropFirst()  // skip initial value (already installed above)
-            .sink { [weak self] _ in self?.installHotkey() }
+            .sink { [weak self] combo in self?.installHotkey(combo) }
             .store(in: &cancellables)
 
         sync.start()
@@ -101,8 +102,8 @@ final class AppEnvironment: ObservableObject {
         Log.app.info("Bootstrap complete")
     }
 
-    private func installHotkey() {
-        HotKey.shared.set(combo: config.config.hotkey.palette) { [weak self] in
+    private func installHotkey(_ combo: String) {
+        HotKey.shared.set(combo: combo) { [weak self] in
             self?.palette.toggle()
         }
     }
