@@ -30,7 +30,8 @@ docs are kept under [`legacy-electron/`](legacy-electron/) for ADR cross-referen
 | [tracker.md](tracker.md) | AX-API window tracking, idle detection, GRDB storage |
 | [uploader.md](uploader.md) | ImageIO compression, GitHub REST upload, drop targets |
 | [palette.md](palette.md) | NSPanel palette, global hotkey, `nexus://` scheme, CommandRegistry |
-| [decisions.md](decisions.md) | Swift ADRs (SADR-001 .. SADR-014). Cross-references `legacy-electron/decisions.md` for the original ADR-NNN entries |
+| [sync.md](sync.md) | Multi-Mac sync: record kinds, the `services/server` HTTP contract, merge and first-contact rules, export, deploy |
+| [decisions.md](decisions.md) | Swift ADRs (SADR-001 .. SADR-016). Cross-references `legacy-electron/decisions.md` for the original ADR-NNN entries |
 | [migration.md](migration.md) | Electron→Swift data compatibility, rollout strategy |
 | [pitfalls.md](pitfalls.md) | Postmortem of traps hit during the migration. Read before adopting any of these patterns in a new project |
 | [legacy-electron/](legacy-electron/) | Two preserved Electron-era spec files (architecture.md, decisions.md). Kept solely so SADR entries that say "see ADR-009" still resolve in working tree. Full Electron sources/spec at `legacy/electron` git tag |

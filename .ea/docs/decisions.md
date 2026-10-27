@@ -386,6 +386,39 @@ migration to standard paths is not the app's job.
 
 ---
 
+## SADR-016: Sync through a small server, last write wins per record
+**Status**: Accepted (nexus-016 server; client in nexus-017)
+
+**Context**: Several Macs run Nexus, and settings, pomodoro data, and tracker
+records should follow the user between them. The owner's other apps (iris,
+forge) already run a TypeScript server with a Postgres `records` table and an
+export feed that intake reads.
+
+**Decision**: `services/server` in this repo, modeled on iris's server: one
+`records (kind, id, rev, …)` table, a global `rev` sequence, HTTP push and
+pull with a cursor, and `/export/*` for other apps. Each row is one record;
+the newer `updatedAt` wins, ties keep the stored copy, and a losing write gets
+the stored record back. Deletes are tombstones. Settings sync whole, one record
+per key, including the uploader's GitHub token. Contract: [`sync.md`](sync.md).
+
+**Rejected alternatives**:
+- iris's WebSocket hub and base-rev merge — Nexus has no relay calls, and none of
+  its records is a list two Macs append to at once (sessions and tracker rows
+  are written once by the Mac that recorded them), so plain HTTP and
+  last-write-wins are enough.
+- A settings whitelist — every setting is the user's preference; per-Mac
+  exceptions can come later if one turns out to be machine-specific.
+
+**Consequences**:
+- `tracker_records` needs a UUID `uid` column (autoincrement ids collide across
+  Macs); the client migration adds and backfills it.
+- The GitHub token is stored in plaintext on the server and in its backups.
+  HTTPS protects the wire; settings are never an export kind.
+- A Mac's clock decides which edit wins; clocks skewed by minutes can let an
+  older edit win. Acceptable for one user's settings and catalog edits.
+
+---
+
 ## Inherited / mapped from Electron ADRs
 
 The Electron-era ADR full text lives at
