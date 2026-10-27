@@ -1,4 +1,5 @@
 import SwiftUI
+import NexusSync
 
 /// Settings GUI. Reads from ConfigService into a local `draft`, edits the draft,
 /// commits all changes via Save. Eliminates per-keystroke disk writes (the cause
@@ -33,6 +34,8 @@ struct SettingsView: View {
     }
     @State private var tab: Tab = .pomodoro
     @State private var draft: AppConfig = AppConfig()
+    /// The config `draft` was taken from; the user's edits are the keys where they differ.
+    @State private var base: AppConfig = AppConfig()
     @State private var initialized = false
 
     var body: some View {
@@ -51,19 +54,27 @@ struct SettingsView: View {
         .onAppear {
             if !initialized {
                 draft = config.config
+                base = draft
                 initialized = true
             }
         }
-        // Pull in external edits (e.g., user hand-edited config.json) when
-        // the user has no unsaved changes — otherwise leave their draft alone.
+        // External changes (sync, a hand-edited config.json) rebase the draft:
+        // keys the user has not edited take the new value, edited keys keep theirs.
         .onChange(of: config.config) { newValue in
-            if !isDirty {
-                draft = newValue
-            }
+            draft = draft.rebased(from: base, onto: newValue)
+            base = newValue
         }
     }
 
-    private var isDirty: Bool { draft != config.config }
+    private var isDirty: Bool { draft != base }
+
+    /// Write only the edited keys onto the latest config, never a stale whole draft.
+    private func save() {
+        let merged = draft.rebased(from: base, onto: config.config)
+        config.save(merged)
+        draft = merged
+        base = merged
+    }
 
     // MARK: - Tab bar
 
@@ -117,10 +128,10 @@ struct SettingsView: View {
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
             Spacer()
-            Button("Revert") { draft = config.config }
+            Button("Revert") { draft = config.config; base = config.config }
                 .controlSize(.small)
                 .disabled(!isDirty)
-            Button("Save") { config.save(draft) }
+            Button("Save") { save() }
                 .controlSize(.small)
                 .keyboardShortcut("s", modifiers: .command)
                 .buttonStyle(.borderedProminent)
@@ -184,5 +195,22 @@ struct SettingsView: View {
 
     private func openInEditor() {
         NSWorkspace.shared.open(Paths.configFile)
+    }
+}
+
+extension AppConfig {
+    /// `latest` with the leaves where `self` differs from `base` (the user's edits) laid on top.
+    func rebased(from base: AppConfig, onto latest: AppConfig) -> AppConfig {
+        guard self != base else { return latest }
+        guard let mine = try? Self.leaves(self), let old = try? Self.leaves(base),
+              var merged = try? Self.leaves(latest) else { return self }
+        for (key, value) in mine where old[key] != value { merged[key] = value }
+        let object = JSONValue.object(Settings.unflatten(merged))
+        return (try? JSONDecoder().decode(AppConfig.self, from: JSONEncoder().encode(object))) ?? self
+    }
+
+    private static func leaves(_ config: AppConfig) throws -> [String: JSONValue] {
+        guard case .object(let object) = try JSONDecoder().decode(JSONValue.self, from: JSONEncoder().encode(config)) else { return [:] }
+        return Settings.flatten(object)
     }
 }

@@ -6,9 +6,10 @@ public protocol SettingsStore: Sendable {
     func save(_ settings: [String: JSONValue]) async throws
 }
 
-enum Settings {
+/// `config.json` ↔ dotted-key leaves.
+public enum Settings {
     /// Leaves keyed by dotted path, e.g. `pomodoro.workDuration`. Arrays are leaves.
-    static func flatten(_ object: [String: JSONValue], prefix: String = "") -> [String: JSONValue] {
+    public static func flatten(_ object: [String: JSONValue], prefix: String = "") -> [String: JSONValue] {
         var out: [String: JSONValue] = [:]
         for (key, value) in object {
             let path = prefix.isEmpty ? key : "\(prefix).\(key)"
@@ -18,7 +19,7 @@ enum Settings {
         return out
     }
 
-    static func unflatten(_ leaves: [String: JSONValue]) -> [String: JSONValue] {
+    public static func unflatten(_ leaves: [String: JSONValue]) -> [String: JSONValue] {
         var out: [String: JSONValue] = [:]
         for (path, value) in leaves { set(&out, path.split(separator: ".").map(String.init)[...], value) }
         return out
