@@ -66,11 +66,16 @@ Settings sync whole, with no whitelist; the uploader's GitHub token is a setting
 
 Any thrown error (network, HTTP status, cancellation) leaves the outbox and the cursor where the last committed page put them; the next `sync()` resumes. Settings are never pushed as tombstones: a key missing locally is one this app version does not know.
 
-**Wiring in the app** (nexus-018):
-- `Migrator.migrator`: call `NexusSync.registerMigrations(&m)` before `return m`.
-- A `SettingsStore` over `ConfigService` on the main actor: `load` encodes `config` to a JSON object, `save` decodes it into `AppConfig` and calls `ConfigService.save`.
-- `SyncEngine(db: database.queue, api: SyncClient(baseURL:key:), settings:)`; call `sync()` at launch, on a timer, and after local edits. Refresh the repositories' published projections after a sync that pulled records.
-- `TrackerRepository.bootstrap` extends the row with the highest `id`; after a pull that can be another Mac's row, so it should remember the last row it wrote (for example by `uid`) instead.
+**Wiring in the app** (nexus-018, `Nexus/Features/Sync/`):
+- `Migrator.migrator` calls `NexusSync.registerMigrations(&m)` after the app's own migrations.
+- **Connection** (`SyncConnection`): `enabled` (default off), `server` (default `https://nexus.easonsi.site`), `key`, in `sync.json` (mode 0600) next to `config.json`. It is not part of `AppConfig`, so it never syncs and a first contact cannot overwrite another Mac's connection. This Mac's sync state (`device`, `cursor`, `server`) stays in `sync_state`.
+- `ConfigSettingsStore`: `load` encodes `ConfigService.config` to a JSON object, `save` decodes it into `AppConfig` and calls `ConfigService.save` on the main actor. Every `AppConfig` key syncs, hotkey and window size included.
+- `SyncCoordinator` (main actor) owns one `SyncEngine(db: database.queue, api: SyncClient(baseURL:key:), settings:)`, created only while the connection is enabled with a key and a valid URL; with sync off there is no engine and no network. It runs `sync()` after bootstrap, every 5 minutes, 10 s after the Mac wakes, and 5 s after the last edit (debounced) to pomodoro tables (`DatabaseRegionObservation`) or `config`. Tracker records change every poll, so they ride the 5-minute timer. One sync at a time; an edit during a sync (including the sync's own writes) schedules one follow-up. A failed sync backs off (30 s doubling to 30 min; edits and wake wait for it, "Sync now" does not) and shows in the status, never as an alert.
+- After a sync that pulled or got `stale` records, `PomodoroRepository.refresh()` and `TrackerRepository.reload()` update the published projections.
+- `TrackerRepository` keeps the uid of the last row it inserted in `sync_state` (`tracker_last_uid`, written in the insert's transaction) and extends that row after a relaunch; with no remembered uid it falls back to the highest `id` only while the database has never synced (no `server` in `sync_state`).
+- **Settings → Sync**: the switch (applies at once), server and key (secure field, saved with "Save Connection"), "Sync now", and the last result (time; pushed / pulled / stale, or the error and refused items).
+
+A fresh Mac seeds the default project and tags before its first sync; those rows are newer local edits, so they win over the server's copies under the merge rule (only `createdAt` changes).
 
 **Tests**: XCTest with the app's v1–v4 schema copied into `Tests/NexusSyncTests/Fixture.swift` and an in-memory fake server that follows this page.
 

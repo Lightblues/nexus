@@ -62,6 +62,7 @@ final class MainWindowController: NSObject {
             .environmentObject(env.tracker)
             .environmentObject(env.uploader)
             .environmentObject(env.uploaderRepository)
+            .environmentObject(env.sync)
             .environmentObject(routeRequest)
             .environmentObject(routeRequest)
         let host = NSHostingController(rootView: root)

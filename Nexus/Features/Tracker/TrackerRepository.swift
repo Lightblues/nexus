@@ -23,16 +23,25 @@ final class TrackerRepository: ObservableObject {
 
     func bootstrap() async {
         await refreshToday()
-        // Load last row id + record for merge continuation across launches.
+        // Load the last row this Mac wrote (by uid; after a sync pull the highest id
+        // can be another Mac's record) for merge continuation across launches.
+        // With no remembered uid, fall back to the highest id only if the database never synced.
         struct LastRow: Sendable {
             let id: Int64
             let record: WindowActivityRecord
         }
         do {
             let last: LastRow? = try await db.read { db in
-                guard let row = try Row.fetchOne(db, sql: """
-                    SELECT * FROM tracker_records ORDER BY id DESC LIMIT 1
-                    """) else { return nil }
+                let state = { (key: String) in try String.fetchOne(db, sql: "SELECT value FROM sync_state WHERE key = ?", arguments: [key]) }
+                let row: Row?
+                if let uid = try state(Self.lastUidKey) {
+                    row = try Row.fetchOne(db, sql: "SELECT * FROM tracker_records WHERE uid = ?", arguments: [uid])
+                } else if try state("server") == nil {
+                    row = try Row.fetchOne(db, sql: "SELECT * FROM tracker_records ORDER BY id DESC LIMIT 1")
+                } else {
+                    row = nil
+                }
+                guard let row else { return nil }
                 return LastRow(id: row["id"], record: Self.recordFromRow(row))
             }
             if let last {
@@ -44,6 +53,12 @@ final class TrackerRepository: ObservableObject {
         }
     }
 
+    /// Re-read today's projection, e.g. after a sync pulled records.
+    func reload() async { await refreshToday() }
+
+    /// `sync_state` key holding the uid of the last row this Mac inserted.
+    private nonisolated static let lastUidKey = "tracker_last_uid"
+
     // MARK: - Mutations
 
     /// Insert a fresh record (new app or new file).
@@ -51,7 +66,12 @@ final class TrackerRepository: ObservableObject {
         do {
             let newId = try await db.write { db -> Int64 in
                 try Self.insertRow(db: db, record: record)
-                return db.lastInsertedRowID
+                let id = db.lastInsertedRowID
+                try db.execute(sql: """
+                    INSERT OR REPLACE INTO sync_state (key, value)
+                    SELECT ?, uid FROM tracker_records WHERE id = ?
+                    """, arguments: [Self.lastUidKey, id])
+                return id
             }
             lastRowId = newId
             lastRecord = record

@@ -1,5 +1,6 @@
 import Foundation
 import GRDB
+import NexusSync
 
 /// Versioned schema migrations. Each migration runs once per database;
 /// GRDB tracks applied migrations in `grdb_migrations` table.
@@ -113,6 +114,7 @@ enum Migrator {
             }
         }
 
+        NexusSync.registerMigrations(&m)
         return m
     }
 }

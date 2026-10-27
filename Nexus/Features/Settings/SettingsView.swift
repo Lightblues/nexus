@@ -10,7 +10,7 @@ struct SettingsView: View {
     @EnvironmentObject var config: ConfigService
 
     enum Tab: String, CaseIterable, Identifiable {
-        case pomodoro, tracker, uploader, hotkey
+        case pomodoro, tracker, uploader, hotkey, sync
         var id: String { rawValue }
         var title: String {
             switch self {
@@ -18,6 +18,7 @@ struct SettingsView: View {
             case .tracker:  return "Tracker"
             case .uploader: return "Uploader"
             case .hotkey:   return "Hotkey"
+            case .sync:     return "Sync"
             }
         }
         var systemImage: String {
@@ -26,6 +27,7 @@ struct SettingsView: View {
             case .tracker:  return "clock"
             case .uploader: return "arrow.up.circle"
             case .hotkey:   return "keyboard"
+            case .sync:     return "arrow.triangle.2.circlepath"
             }
         }
     }
@@ -37,8 +39,10 @@ struct SettingsView: View {
         VStack(spacing: 0) {
             tabBar
             Divider()
-            saveBar
-            Divider()
+            if tab != .sync {
+                saveBar
+                Divider()
+            }
             ScrollView { tabContent.padding(20) }
             Divider()
             bottomBar
@@ -136,6 +140,7 @@ struct SettingsView: View {
         case .tracker:  TrackerSettingsForm(draft: $draft)
         case .uploader: UploaderSettingsForm(draft: $draft)
         case .hotkey:   HotkeySettingsForm(draft: $draft)
+        case .sync:     SyncSettingsForm()
         }
     }
 

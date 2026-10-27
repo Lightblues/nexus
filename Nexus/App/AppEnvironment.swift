@@ -18,6 +18,7 @@ final class AppEnvironment: ObservableObject {
     let notifier: NotificationService
     let mainWindow: MainWindowController
     let palette: PaletteController
+    let sync: SyncCoordinator
 
     init() {
         let config = ConfigService()
@@ -43,6 +44,10 @@ final class AppEnvironment: ObservableObject {
         self.uploader = UploaderService(repository: uploaderRepository, config: config)
         self.mainWindow = MainWindowController()
         self.palette = PaletteController()
+        self.sync = SyncCoordinator(database: database, config: config) {
+            await pomodoroRepository.refresh()
+            await trackerRepository.reload()
+        }
     }
 
     /// Initial async work that needs `await` — called from AppDelegate.applicationDidFinishLaunching.
@@ -90,6 +95,8 @@ final class AppEnvironment: ObservableObject {
             .dropFirst()  // skip initial value (already installed above)
             .sink { [weak self] _ in self?.installHotkey() }
             .store(in: &cancellables)
+
+        sync.start()
 
         Log.app.info("Bootstrap complete")
     }

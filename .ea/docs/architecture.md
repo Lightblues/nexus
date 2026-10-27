@@ -156,7 +156,7 @@ Standard macOS layout, all keyed by bundle id `site.easonsi.nexus` (resolved via
 
 | Kind | Location | What lives here | Backed up by Time Machine? |
 |---|---|---|---|
-| User-critical | `~/Library/Application Support/site.easonsi.nexus/` | `config.json`, `nexus.db` (+ `-wal`, `-shm`) | ✅ |
+| User-critical | `~/Library/Application Support/site.easonsi.nexus/` | `config.json`, `nexus.db` (+ `-wal`, `-shm`), `sync.json` (this Mac's sync connection, see `sync.md`) | ✅ |
 | Regenerable | `~/Library/Caches/site.easonsi.nexus/` | `uploader-thumbnails/{id}.webp` | ❌ (system may purge under disk pressure) |
 | Logs | `~/Library/Logs/site.easonsi.nexus/` | `main.log` + 4 rotated generations (`.1`..`.4`) | ❌ |
 | UI state | `~/Library/Preferences/site.easonsi.nexus.plist` | `NSWindow` frame autosave (MainWindow) | ✅ (NSUserDefaults) |
@@ -183,7 +183,7 @@ Standard macOS layout, all keyed by bundle id `site.easonsi.nexus` (resolved via
 
 | Kind | Location | What lives here | Backed up by Time Machine? |
 |---|---|---|---|
-| User-critical | `~/Library/Application Support/site.easonsi.nexus/` | `config.json`, `nexus.db` (+ `-wal`, `-shm`) | ✅ |
+| User-critical | `~/Library/Application Support/site.easonsi.nexus/` | `config.json`, `nexus.db` (+ `-wal`, `-shm`), `sync.json` (this Mac's sync connection, see `sync.md`) | ✅ |
 | Regenerable | `~/Library/Caches/site.easonsi.nexus/` | `uploader-thumbnails/{id}.webp` | ❌ (system may purge under disk pressure) |
 | Logs | `~/Library/Logs/site.easonsi.nexus/` | `main.log` + 4 rotated generations (`.1`..`.4`) | ❌ |
 | UI state | `~/Library/Preferences/site.easonsi.nexus.plist` | `NSWindow` frame autosave (MainWindow) | ✅ (NSUserDefaults) |

@@ -59,3 +59,7 @@ Nexus/
 User data lives at `~/.ea/nexus/` (config, SQLite databases, log mirror).
 Schema-compatible with the Electron build's data files — first launch
 auto-migrates legacy JSON stores.
+
+Sync (off by default): Settings → Sync, turn it on and paste the server key;
+settings, pomodoro data and tracker records then converge across Macs through
+`https://nexus.easonsi.site`. See [`.ea/docs/sync.md`](.ea/docs/sync.md).

@@ -37,6 +37,8 @@ enum Paths {
 
     static var configFile: URL { supportDir.appendingPathComponent("config.json") }
     static var dbFile: URL     { supportDir.appendingPathComponent("nexus.db") }
+    /// Sync connection (enabled, server, key). Local to this Mac, never synced.
+    static var syncFile: URL   { supportDir.appendingPathComponent("sync.json") }
 
     // MARK: - Regenerable (Caches)
 
