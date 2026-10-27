@@ -13,12 +13,12 @@ on:
 
 jobs:
   build:
-    runs-on: macos-14   # Apple Silicon runner — fastest archive + universal output
+    runs-on: macos-15   # Apple Silicon runner; default Xcode 16.4 (GRDB 7 needs Xcode 16.3+ for 7.9+)
     steps:
       - uses: actions/checkout@v5
 
       - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode.app
+        run: sudo xcode-select -s /Applications/Xcode.app && xcodebuild -version
 
       - name: Install XcodeGen
         run: brew install xcodegen

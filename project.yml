@@ -22,8 +22,8 @@ settings:
     ENABLE_HARDENED_RUNTIME: NO
     SWIFT_TREAT_WARNINGS_AS_ERRORS: NO
     GCC_TREAT_WARNINGS_AS_ERRORS: NO
-    # Swift 6 strict concurrency. Xcode 15 (CI) treats some captures as
-    # errors that Xcode 16+ only warns about. We're targeting Swift 5 mode
+    # Swift 6 strict concurrency. Xcode 15 (CI before GRDB 7; now Xcode 16.4)
+    # treated some captures as errors that Xcode 16+ only warns about. We're targeting Swift 5 mode
     # but the compiler still applies the strictness level set here.
     # `minimal` matches the pre-Swift-6 behavior and unblocks CI builds;
     # tightening to `targeted` or `complete` is a future refactor.
@@ -31,7 +31,9 @@ settings:
 packages:
   GRDB:
     url: https://github.com/groue/GRDB.swift
-    from: 6.29.0
+    from: 7.0.0
+  NexusSync:
+    path: Packages/NexusSync
 targets:
   Nexus:
     type: application
@@ -46,6 +48,7 @@ targets:
     dependencies:
       - package: GRDB
         product: GRDB
+      - package: NexusSync
     info:
       path: Nexus/Resources/Info.plist
       properties:

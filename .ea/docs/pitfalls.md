@@ -12,14 +12,16 @@ Companion to `decisions.md` (which records *what* we chose). This file records
 ## 1. Cross-Xcode-version compatibility (the biggest CI bleed)
 
 Local Xcode versions move faster than the macOS GitHub runner. Three concrete
-traps fall out of that mismatch.
+traps fall out of that mismatch. They were hit when CI ran Xcode 15 on `macos-14`;
+since the GRDB 7 move (SADR-017) CI runs `macos-15` with Xcode 16.4, which GRDB 7
+requires (7.0–7.8 need Xcode 16.0+, 7.9+ need 16.3+). The fixes below stay in place.
 
-### 1.1 `objectVersion = 77` rejected by CI Xcode 15
+### 1.1 `objectVersion = 77` rejected by an older CI Xcode
 
 **Symptom**: CI fails with `error: Project file format is too new (objectVersion = 77)`.
 
 **Root cause**: My local Xcode 26 (macOS Tahoe beta) writes pbxproj at format
-77; CI's Xcode 15 only understands ≤ 56.
+77; CI's Xcode 15 at the time only understood ≤ 56.
 
 **Fix**: `scripts/build-mac.sh` patches the freshly-generated project after
 `xcodegen` and before `xcodebuild`:
@@ -33,7 +35,8 @@ if [[ -n "$CURRENT" && "$CURRENT" -gt 56 ]]; then
 fi
 ```
 
-Pin to 56 (Xcode 15.0+ baseline). Don't pin to whatever the local Xcode emits.
+Pin to 56 (readable by Xcode 15.0+, so also by CI's Xcode 16.4). Don't pin to
+whatever the local Xcode emits.
 
 ### 1.2 Swift 6 strict concurrency errors that don't fire locally
 
@@ -81,7 +84,8 @@ errors.
      base:
        SWIFT_STRICT_CONCURRENCY: minimal
    ```
-   Catches the long tail of actor-isolation lints we don't want on Xcode 15 CI.
+   Catches the long tail of actor-isolation lints we don't want on CI (Xcode 16.4
+   now, Swift 5 language mode; GRDB 7's `@Sendable` closures need no stricter level).
 
 4. **Cross-actor calls in nonisolated SwiftUI View methods** (the v1.2.0 release blocker):
 

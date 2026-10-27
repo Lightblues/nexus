@@ -8,7 +8,7 @@ MBP  ─┐                                         ┌─ intake (export feed, 
 mini ─┘                                         │
 ```
 
-Server code: `services/server` (TypeScript on Node ≥ 22.18, Postgres). The Swift client is nexus-017; it uses only the contract on this page. Upload history and upload paths do not sync yet.
+Server code: `services/server` (TypeScript on Node ≥ 22.18, Postgres). Client code: `Packages/NexusSync` ([Swift client](#swift-client)); it uses only the contract on this page. Upload history and upload paths do not sync yet.
 
 ## What syncs
 
@@ -39,6 +39,46 @@ Settings sync whole, with no whitelist; the uploader's GitHub token is a setting
 - **Pull** from the cursor until `more` is false. Apply each record by `(kind, id)` unless the local copy has an unsent edit with a newer `updatedAt`; that edit is pushed and the server decides. A record from this Mac's own push is applied harmlessly.
 - **Push** every local change since the last push: the whole current record with a fresh `updatedAt`, or a tombstone for a deleted row. Changing a session's tags pushes the session. Apply every `stale` record in the results; leave items with an `error` unsent and log them.
 - **First contact** (no cursor yet, or a different server URL): pull everything first. For settings the server's value wins per key, so a new Mac does not overwrite shared settings with its defaults; keys the server lacks are then pushed, and later local changes push as usual. For the other kinds, local records the server lacks are pushed, and a record on both sides is settled by the merge rule.
+
+## Swift client
+
+`Packages/NexusSync`: a SwiftPM package (tools 5.9, macOS 13, GRDB 7 only, no AppKit/SwiftUI) that builds and tests on Linux. Decision: SADR-017.
+
+| File | Content |
+|---|---|
+| `NexusSync.swift` | `NexusSync.registerMigrations(_:)`: migration `sync_v1` and the triggers |
+| `Records.swift` | `SyncRecord`, `PushResult`, `PullPage`; `RecordKind`, the row ↔ body mapping for each table kind |
+| `Settings.swift` | `SettingsStore` protocol; flattening `config.json` to dotted keys |
+| `SyncClient.swift` | `SyncAPI` protocol; `SyncClient` (base URL, key, injectable `URLSession`) |
+| `SyncEngine.swift` | `SyncEngine` actor: `sync()`, `deviceID()` |
+
+**Schema** (`sync_v1`, registered after the app's own migrations):
+- `tracker_records.uid` (unique index), filled for existing rows by the migration and for new rows by the insert trigger. `lastInsertedRowID` is unaffected.
+- `sync_outbox (kind, id, updated_at)`: one row per record with an unsent local change; `updated_at` is the trigger's clock (unix ms) at the latest edit.
+- `sync_state (key, value)`: `device`, `cursor`, `server` (the URL of the last first contact), and `applying` while a remote change is written.
+- `sync_settings (key, value, updated_at)`: the last-synced value of every setting key (JSON text).
+- Insert, update, and delete triggers on `pomodoro_sessions`, `pomodoro_session_tags` (enqueues the session), `pomodoro_projects`, `pomodoro_tag_catalog`, and `tracker_records` upsert into `sync_outbox` unless `applying` is set. An update enqueues the old key too, so a rename pushes a tombstone for the old name.
+
+**`sync()`**:
+1. First contact (`sync_state.server` ≠ the client's base URL): clear `sync_settings`, pull from 0 with settings forced to the server's values, then queue every local row the server did not send.
+2. Push settings whose flattened value differs from `sync_settings` (`updatedAt` = now), then the outbox in batches of ≤ 500 items and ≤ 256 KB, each item the whole current row or a tombstone when the row is gone. An accepted item leaves the outbox only if it was not edited again meanwhile; a `stale` answer is applied; an `error` item stays and is listed in `SyncReport.failed`.
+3. Pull from the cursor until `more` is false; each page is applied in one write together with its cursor and settings snapshot. A record loses to an outbox entry with a newer `updatedAt`; a setting is skipped when its local value differs from the snapshot (an edit not yet pushed). Pulled settings are written through `SettingsStore.save` before the page commits.
+
+Any thrown error (network, HTTP status, cancellation) leaves the outbox and the cursor where the last committed page put them; the next `sync()` resumes. Settings are never pushed as tombstones: a key missing locally is one this app version does not know.
+
+**Wiring in the app** (nexus-018):
+- `Migrator.migrator`: call `NexusSync.registerMigrations(&m)` before `return m`.
+- A `SettingsStore` over `ConfigService` on the main actor: `load` encodes `config` to a JSON object, `save` decodes it into `AppConfig` and calls `ConfigService.save`.
+- `SyncEngine(db: database.queue, api: SyncClient(baseURL:key:), settings:)`; call `sync()` at launch, on a timer, and after local edits. Refresh the repositories' published projections after a sync that pulled records.
+- `TrackerRepository.bootstrap` extends the row with the highest `id`; after a pull that can be another Mac's row, so it should remember the last row it wrote (for example by `uid`) instead.
+
+**Tests**: XCTest with the app's v1–v4 schema copied into `Tests/NexusSyncTests/Fixture.swift` and an in-memory fake server that follows this page.
+
+```bash
+docker run --rm -v "$PWD":/w -w /w/Packages/NexusSync swift:6.1-noble \
+  bash -c "apt-get -qq update && apt-get -qq install -y libsqlite3-dev && swift test"
+./Packages/NexusSync/scripts/e2e.sh   # two databases through the real server on a throwaway Postgres
+```
 
 ## HTTP
 

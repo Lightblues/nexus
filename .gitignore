@@ -11,6 +11,7 @@ Nexus.xcodeproj/
 
 # Swift Package Manager
 .swiftpm/
+.build/
 Package.resolved
 
 # Build outputs — build/ is build-mac.sh's staging dir (archive/, export/,

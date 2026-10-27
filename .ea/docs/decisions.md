@@ -419,6 +419,40 @@ per key, including the uploader's GitHub token. Contract: [`sync.md`](sync.md).
 
 ---
 
+## SADR-017: GRDB 7, and sync logic in a Linux-testable package
+**Status**: Accepted (nexus-017)
+
+**Context**: The sync client (SADR-016) has enough moving parts (triggers,
+outbox, paging, first contact) that it needs tests, and the owner develops it
+on a Linux devcloud with no Mac. GRDB 6.29 does not link on Linux (Ubuntu's
+SQLite lacks `sqlite3_snapshot_*`); GRDB 7 does.
+
+**Decision**: Move the app to GRDB 7 (`project.yml`: `from: 7.0.0`) and put all
+sync logic in `Packages/NexusSync`, a SwiftPM package with GRDB as its only
+dependency and no AppKit/SwiftUI, tested with `swift test` in `swift:6.1-noble`.
+Change capture is SQLite triggers into `sync_outbox`, so the app's repositories
+stay unchanged. Layout and wiring: [`sync.md`](sync.md#swift-client).
+
+**Rejected alternatives**:
+- Recording changes in each repository method — touches every write path and
+  misses writes made outside them (catalog migration, future features).
+- GRDB's `TransactionObserver` — same coverage as triggers but in-process only,
+  and harder to silence exactly for the duration of an applied pull.
+
+**Consequences**:
+- GRDB 7 needs Xcode 16+ (7.0–7.8 declare tools 6.0, 7.9+ declare 6.1, i.e.
+  Xcode 16.3+). CI moves from `macos-14` (default Xcode 15.x) to `macos-15`
+  (default Xcode 16.4), so SwiftPM resolves the same GRDB 7.11 the package is
+  tested with. The app stays in Swift 5 language mode with `minimal`
+  concurrency checking.
+- GRDB 7 async reads and writes throw `CancellationError` when their Task is
+  cancelled (GRDB 6 ran them to completion). Writes started from a SwiftUI
+  `.task` that goes away are rolled back.
+- `tracker_records` gains `uid`; rows applied from other Macs get fresh local
+  autoincrement ids.
+
+---
+
 ## Inherited / mapped from Electron ADRs
 
 The Electron-era ADR full text lives at

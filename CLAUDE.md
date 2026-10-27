@@ -24,8 +24,10 @@ archived at the `legacy/electron` git tag.
 ## Swift Environment
 - Project generator: **XcodeGen** (`project.yml` → `Nexus.xcodeproj`, gitignored)
 - Min macOS: 13.0 (SwiftUI Charts, `MenuBarExtra` cohort)
-- Package manager: **SwiftPM** (deps declared in `project.yml`: GRDB)
-- Swift mode: 5.9, strict concurrency `minimal` (Xcode 15 CI compat)
+- Package manager: **SwiftPM** (deps declared in `project.yml`: GRDB 7, local `Packages/NexusSync`)
+- Toolchain: CI builds on `macos-15` with Xcode 16.4; GRDB 7 needs Xcode 16+ (7.9+ need 16.3+). See SADR-017.
+- Swift mode: 5.9, strict concurrency `minimal`
+- `Packages/NexusSync` (sync logic) builds and tests on Linux; command in `.ea/docs/sync.md` → Swift client
 
 ## Git
 - Commit finished work yourself once its checks pass (build and tests as relevant), one commit per logical change in the repository's commit style, then push `main`. No separate review step is needed.
