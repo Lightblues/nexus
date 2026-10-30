@@ -9,14 +9,15 @@ Status: draft, 2026-10-30, waiting for the user's review. Rounds are in order; e
 - 2026-06: Swift rewrite (v1.0 → v1.2.3): pomodoro, app tracker, palette, uploader; standard macOS data layout (SADR-015).
 - 2026-10-27/28: sync (v1.3.0, v1.3.1): server `services/server` at `nexus.easonsi.site`, `Packages/NexusSync`, app wiring nexus-018, export to intake through sonar. Two Macs converged; the settings overwrite on first contact fixed in v1.3.1 ([log/2026-10-27-sync.md](log/2026-10-27-sync.md)).
 
-## 1. Foundation
+## 1. Foundation (in progress)
 
 What later rounds stand on. No new features.
 
-1. **Docs layout.** `AGENTS.md` (with `CLAUDE.md` a symlink), `docs/README.md` as the index (from `spec.md`), decisions to `log/decisions.md` with the SADR numbers kept, every `docs/` page checked against the code (`tracker.md` still describes the Electron JSON store).
-2. **CI.** Build and test `main` on every push (nexus-010), launch the built app (nexus-003), strict codesign and lipo (nexus-011), mount the DMG (nexus-012), unit test target (nexus-013).
-3. **Permissions survive upgrades.** A stable signing identity instead of ad-hoc, so the Accessibility grant is kept across Homebrew upgrades; the Accessibility prompt on first start (nexus-002).
-4. **Open fixes.** Triage nexus-004 to 009, 014, 015: fix, fold into round 2, or close. Fresh-Mac first contact: seeded default projects and tags lose to the server's copies.
+1. ~~**Development on devcloud, builds on CI, rolling beta.**~~ Done 2026-10-30 (SADR-018): every push to `main` is built, launched, and DMG-checked on `macos-15`, signed with a stable self-signed identity, and published as the `nexus@beta` cask; `scripts/beta.sh install` keeps a Mac on it (xh-mini-m1 is the test Mac). nexus-003, 010, 011, 012 done.
+2. **Permissions survive upgrades.** The stable identity is in place; the Accessibility prompt on first start (nexus-002). Each Mac grants once more when it moves to a signed build, then keeps the grant.
+3. **Docs layout.** `AGENTS.md` (with `CLAUDE.md` a symlink), `docs/README.md` as the index (from `spec.md`), decisions to `log/decisions.md` with the SADR numbers kept, every `docs/` page checked against the code (`tracker.md` still describes the Electron JSON store).
+4. **Tests.** A unit test target run by CI (nexus-013).
+5. **Open fixes.** Triage nexus-004 to 009, 014, 015: fix, fold into round 2, or close. Fresh-Mac first contact: seeded default projects and tags lose to the server's copies. The casks' `postflight` is deprecated in Homebrew 7 (warning on install).
 
 ## 2. Agent-native review and agent surface
 
