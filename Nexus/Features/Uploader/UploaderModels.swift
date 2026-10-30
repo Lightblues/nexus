@@ -92,7 +92,21 @@ enum UploaderError: LocalizedError {
     case notConfigured
     case unsupportedFormat
     case compressionFailed(String)
+    case invalidToken
+    case repoNotFound
+    case fileExistsConflict
+    case network(URLError)
     case http(Int, String)
+
+    /// A GitHub API status that is not 2xx; statuses with no typed case keep their code and body.
+    init(status: Int, body: String) {
+        switch status {
+        case 401: self = .invalidToken
+        case 404: self = .repoNotFound
+        case 409: self = .fileExistsConflict
+        default: self = .http(status, body)
+        }
+    }
 
     var errorDescription: String? {
         switch self {
@@ -102,6 +116,14 @@ enum UploaderError: LocalizedError {
             return "Image format not supported."
         case .compressionFailed(let why):
             return "Compression failed: \(why)"
+        case .invalidToken:
+            return "GitHub rejected the token (401). Check it in Settings → Uploader; it needs Contents read and write on the repo."
+        case .repoNotFound:
+            return "Repository or branch not found (404). Check owner, repo and branch in Settings → Uploader, and that the token can see the repo."
+        case .fileExistsConflict:
+            return "The file changed on GitHub while uploading (409). Try again."
+        case .network(let error):
+            return "Network error: \(error.localizedDescription)"
         case .http(let code, let body):
             return "HTTP \(code): \(body)"
         }

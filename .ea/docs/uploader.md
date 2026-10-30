@@ -105,9 +105,11 @@ struct GitHubClient {
 }
 ```
 
-Errors map to a typed `UploaderError` enum: `.invalidToken`, `.repoNotFound`,
-`.fileExistsConflict`, `.network(URLError)`. `UploaderService` translates them
-into user-facing toast messages.
+`GitHubUploader` maps errors to `UploaderError` (`UploaderError(status:body:)`):
+401 → `.invalidToken`, 404 → `.repoNotFound`, 409 → `.fileExistsConflict`, any
+other non-2xx → `.http(status, body)`, and a transport failure → `.network(URLError)`.
+`UploaderService` rethrows them unchanged; the message shows in
+`UploaderView.messageBanner`.
 
 ## CDN URL
 

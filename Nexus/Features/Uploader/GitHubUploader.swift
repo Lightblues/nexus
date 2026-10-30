@@ -45,12 +45,11 @@ actor GitHubUploader {
         req.setValue("Nexus", forHTTPHeaderField: "User-Agent")
         req.httpBody = try JSONEncoder().encode(body)
 
-        let (respData, resp) = try await URLSession.shared.data(for: req)
-        let http = resp as? HTTPURLResponse
-        guard let http, (200...299).contains(http.statusCode) else {
+        let (respData, http) = try await send(req)
+        guard (200...299).contains(http.statusCode) else {
             let bodyStr = String(data: respData, encoding: .utf8) ?? "<no body>"
-            Log.uploader.error("PUT \(fullPath) failed: \(http?.statusCode ?? -1) \(bodyStr)")
-            throw UploaderError.http(http?.statusCode ?? -1, bodyStr)
+            Log.uploader.error("PUT \(fullPath) failed: \(http.statusCode) \(bodyStr)")
+            throw UploaderError(status: http.statusCode, body: bodyStr)
         }
 
         struct Response: Decodable {
@@ -80,11 +79,9 @@ actor GitHubUploader {
         req.setValue("Nexus", forHTTPHeaderField: "User-Agent")
         req.httpBody = try JSONEncoder().encode(body)
 
-        let (respData, resp) = try await URLSession.shared.data(for: req)
-        let http = resp as? HTTPURLResponse
-        guard let http, (200...299).contains(http.statusCode) else {
-            let bodyStr = String(data: respData, encoding: .utf8) ?? "<no body>"
-            throw UploaderError.http(http?.statusCode ?? -1, bodyStr)
+        let (respData, http) = try await send(req)
+        guard (200...299).contains(http.statusCode) else {
+            throw UploaderError(status: http.statusCode, body: String(data: respData, encoding: .utf8) ?? "<no body>")
         }
         Log.uploader.info("DELETE \(path) ok")
     }
@@ -102,14 +99,23 @@ actor GitHubUploader {
         req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         req.setValue("Nexus", forHTTPHeaderField: "User-Agent")
 
-        let (data, resp) = try await URLSession.shared.data(for: req)
-        let http = resp as? HTTPURLResponse
-        guard let http, http.statusCode == 200 else {
+        let (data, http) = try await send(req)
+        guard http.statusCode == 200 else {
             // 404 → file doesn't exist yet, totally fine.
-            throw UploaderError.http(http?.statusCode ?? -1, "")
+            throw UploaderError(status: http.statusCode, body: "")
         }
         struct R: Decodable { let sha: String }
         return try JSONDecoder().decode(R.self, from: data).sha
+    }
+
+    private func send(_ req: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        do {
+            let (data, resp) = try await URLSession.shared.data(for: req)
+            guard let http = resp as? HTTPURLResponse else { throw UploaderError.http(-1, "not an HTTP response") }
+            return (data, http)
+        } catch let error as URLError {
+            throw UploaderError.network(error)
+        }
     }
 
     private func contentsURL(cfg: GitHubConfig, path: String) -> URL {
