@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Nexus</title>
+  <meta name="theme-color" content="#f6f7fb" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0f1115" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Nexus">
+  <link rel="icon" href="/icons/favicon-32.png">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <header class="bar">
+    <nav class="crumbs" id="crumbs"></nav>
+    <div class="menu">
+      <button id="menu-button" aria-haspopup="true" aria-expanded="false" title="More">⋯</button>
+      <div id="menu" class="menu-panel" hidden>
+        <button data-action="top">Back to top</button>
+        <button data-action="share" hidden>Share…</button>
+        <button data-action="copy">Copy link</button>
+        <button data-action="reload">Reload</button>
+        <button data-action="logout">Sign out</button>
+      </div>
+    </div>
+  </header>
+  <nav class="tabs">
+    <a href="/app" data-tab="today">Today</a>
+    <a href="/app/history" data-tab="history">History</a>
+    <a href="/app/devices" data-tab="devices">Devices</a>
+  </nav>
+  <main id="view"><p class="muted">Loading…</p></main>
+  <div id="toast" class="toast" hidden></div>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

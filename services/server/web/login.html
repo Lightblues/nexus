@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Sign in · Nexus</title>
+  <meta name="theme-color" content="#f6f7fb" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0f1115" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Nexus">
+  <link rel="icon" href="/icons/favicon-32.png">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body class="landing">
+  <main class="login">
+    <img src="/icons/icon-192.png" alt="" width="72" height="72">
+    <h1>Sign in</h1>
+    <p>Paste a sync key: the read key is enough. The browser keeps a read-only session for 90 days, never the key.</p>
+    <form method="post" action="/login">
+      <input type="password" name="key" autocomplete="current-password" placeholder="Sync key" required autofocus>
+      <button class="button primary" type="submit">Sign in</button>
+    </form>
+    <p class="error" id="error" hidden>That key was not accepted.</p>
+    <p><a href="/">About Nexus</a></p>
+  </main>
+  <script src="/login.js"></script>
+</body>
+</html>

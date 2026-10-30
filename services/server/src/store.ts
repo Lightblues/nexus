@@ -18,6 +18,7 @@ export const EXPORT_KINDS: Record<string, string> = {
   pomodoro_project: 'A pomodoro project, by name, with its display color.',
   pomodoro_tag: 'A tag name in the pomodoro tag catalog.',
   tracker_record: 'One stretch of time in a foreground app: start and end time (unix seconds), duration, app, bundle id, window title, and context (project, file, URL, domain).',
+  day_summary: 'One local day (id YYYY-MM-DD), computed by the server: active time by category, app, project, and domain; time blocks; pomodoro sessions and totals; devices. Rewritten as the day fills in.',
 }
 
 type Query = <R = Record<string, unknown>>(text: string, params?: unknown[]) => Promise<{ rows: R[] }>
@@ -158,6 +159,53 @@ export async function migrate(db: Db): Promise<void> {
     })
   }
   await db.query('CREATE INDEX IF NOT EXISTS records_user_rev ON records (user_id, rev)')
+  // Server-side reads: when a timed record starts, so a day's rows come from an index; and per-user state.
+  const started = await db.query(`SELECT 1 FROM information_schema.columns WHERE table_name = 'records' AND column_name = 'start_at'`)
+  if (!started.rows.length) {
+    await db.query('ALTER TABLE records ADD COLUMN start_at double precision')
+    await db.query(`UPDATE records SET start_at = (body->>'startTime')::float8 WHERE kind IN ('tracker_record', 'pomodoro_session') AND jsonb_typeof(body->'startTime') = 'number'`)
+  }
+  await db.query(`
+    CREATE INDEX IF NOT EXISTS records_user_start ON records (user_id, kind, start_at) WHERE start_at IS NOT NULL;
+    CREATE TABLE IF NOT EXISTS devices (
+      user_id text NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+      device text NOT NULL,
+      name text,
+      first_push bigint NOT NULL,
+      last_push bigint NOT NULL,
+      PRIMARY KEY (user_id, device)
+    );
+    CREATE TABLE IF NOT EXISTS categories (
+      user_id text PRIMARY KEY REFERENCES users (id) ON DELETE CASCADE,
+      rules jsonb NOT NULL,
+      updated_at bigint NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS summary_state (
+      user_id text PRIMARY KEY REFERENCES users (id) ON DELETE CASCADE,
+      version integer NOT NULL,
+      tz text NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS sessions (
+      hash text PRIMARY KEY,
+      user_id text NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+      access text NOT NULL CHECK (access IN ('write', 'read')),
+      created_at bigint NOT NULL,
+      expires_at bigint NOT NULL
+    );
+  `)
+  const known = await db.query('SELECT 1 FROM devices LIMIT 1')
+  if (!known.rows.length) {
+    // Devices that pushed before the table existed, dated by their own edits.
+    await db.query(`INSERT INTO devices (user_id, device, first_push, last_push)
+      SELECT user_id, device, min(updated_at), max(updated_at) FROM records WHERE device <> 'server' GROUP BY user_id, device`)
+  }
+}
+
+/** Unix seconds a tracker row or pomodoro session starts, for the `start_at` column. */
+export function startOf(kind: string, body: unknown): number | null {
+  if (kind !== 'tracker_record' && kind !== 'pomodoro_session') return null
+  const start = (body as { startTime?: unknown } | null)?.startTime
+  return typeof start === 'number' && Number.isFinite(start) ? start : null
 }
 
 export function hashKey(key: string): string {
@@ -206,6 +254,28 @@ export async function addKey(db: Db, user: string, access: Access, label = ''): 
     [hashKey(key), user, access, label, Date.now()],
   )
   return key
+}
+
+export const SESSION_DAYS = 90
+
+/** A browser session for the key's user, at the key's access; only its hash is stored. */
+export async function createSession(db: Db, user: string, access: Access): Promise<string> {
+  const token = randomBytes(32).toString('base64url')
+  const now = Date.now()
+  await db.query('DELETE FROM sessions WHERE expires_at < $1', [now])
+  await db.query('INSERT INTO sessions (hash, user_id, access, created_at, expires_at) VALUES ($1, $2, $3, $4, $5)',
+    [hashKey(token), user, access, now, now + SESSION_DAYS * 86400_000])
+  return token
+}
+
+export async function sessionAuth(db: Db, token: string): Promise<{ user: string; access: Access } | null> {
+  if (!token) return null
+  const { rows } = await db.query<{ user_id: string; access: Access }>('SELECT user_id, access FROM sessions WHERE hash = $1 AND expires_at > $2', [hashKey(token), Date.now()])
+  return rows[0] ? { user: rows[0].user_id, access: rows[0].access } : null
+}
+
+export async function endSession(db: Db, token: string): Promise<void> {
+  await db.query('DELETE FROM sessions WHERE hash = $1', [hashKey(token)])
 }
 
 export function isKind(kind: string): kind is Kind {
@@ -258,7 +328,7 @@ export function openStore(db: Db) {
 
   return {
     /** Last write wins per record by `updatedAt`; on a tie the stored copy stays. */
-    async push(user: string, device: string, items: unknown[]): Promise<PushResult[]> {
+    async push(user: string, device: string, items: unknown[], changed?: (kind: string, body: unknown) => void, deviceName?: string): Promise<PushResult[]> {
       const results: PushResult[] = items.map(headOf)
       const writes: { at: number; item: PushItem & { json: string | null } }[] = []
       items.forEach((item, at) => {
@@ -266,6 +336,12 @@ export function openStore(db: Db) {
         if (typeof checked === 'string') results[at].error = checked
         else writes.push({ at, item: checked })
       })
+      const now = Date.now()
+      await db.query(
+        `INSERT INTO devices (user_id, device, name, first_push, last_push) VALUES ($1, $2, $3, $4, $4)
+         ON CONFLICT (user_id, device) DO UPDATE SET last_push = excluded.last_push, name = coalesce(excluded.name, devices.name)`,
+        [user, device, deviceName || null, now],
+      )
       if (!writes.length) return results
 
       await db.tx(async query => {
@@ -279,16 +355,35 @@ export function openStore(db: Db) {
             continue
           }
           const saved = await query<{ rev: number }>(
-            `INSERT INTO records (user_id, kind, id, rev, updated_at, device, deleted, body)
-             VALUES ($1, $2, $3, nextval('record_rev'), $4, $5, $6, $7::jsonb)
-             ON CONFLICT (user_id, kind, id) DO UPDATE SET rev = excluded.rev, updated_at = excluded.updated_at, device = excluded.device, deleted = excluded.deleted, body = excluded.body
+            `INSERT INTO records (user_id, kind, id, rev, updated_at, device, deleted, body, start_at)
+             VALUES ($1, $2, $3, nextval('record_rev'), $4, $5, $6, $7::jsonb, $8)
+             ON CONFLICT (user_id, kind, id) DO UPDATE SET rev = excluded.rev, updated_at = excluded.updated_at, device = excluded.device, deleted = excluded.deleted, body = excluded.body, start_at = excluded.start_at
              RETURNING rev::float8 AS rev`,
-            [user, item.kind, item.id, item.updatedAt, device, item.deleted === true, item.json],
+            [user, item.kind, item.id, item.updatedAt, device, item.deleted === true, item.json, startOf(item.kind, item.body)],
           )
           results[at].rev = Number(saved.rows[0].rev)
+          if (changed) {
+            if (current?.body) changed(item.kind, current.body)
+            if (item.body) changed(item.kind, item.body)
+          }
         }
       })
       return results
+    },
+
+    /** Writes a record only the server produces (a day summary) under the same lock and rev order as pushes. */
+    async putServerRecord(user: string, kind: string, id: string, body: unknown): Promise<number> {
+      return db.tx(async query => {
+        await query('SELECT pg_advisory_xact_lock($1)', [WRITE_LOCK])
+        const saved = await query<{ rev: number }>(
+          `INSERT INTO records (user_id, kind, id, rev, updated_at, device, deleted, body)
+           VALUES ($1, $2, $3, nextval('record_rev'), $4, 'server', false, $5::jsonb)
+           ON CONFLICT (user_id, kind, id) DO UPDATE SET rev = excluded.rev, updated_at = excluded.updated_at, device = 'server', deleted = false, body = excluded.body
+           RETURNING rev::float8 AS rev`,
+          [user, kind, id, Date.now(), JSON.stringify(body)],
+        )
+        return Number(saved.rows[0].rev)
+      })
     },
 
     /** Records written after `since`, oldest first; a page stops at `maxBytes` but always carries one record. */
@@ -303,7 +398,7 @@ export function openStore(db: Db) {
       )
       const latest = await db.query<{ rev: number }>('SELECT coalesce(max(rev), 0)::float8 AS rev FROM records WHERE user_id = $1', [user])
       const kinds = Object.fromEntries(KINDS.map(kind => [kind, { records: 0, deleted: 0 }]))
-      for (const row of counts.rows) kinds[row.kind] = { records: Number(row.live), deleted: Number(row.deleted) }
+      for (const row of counts.rows) if (isKind(row.kind)) kinds[row.kind] = { records: Number(row.live), deleted: Number(row.deleted) }
       return { rev: Number(latest.rows[0]?.rev ?? 0), kinds }
     },
 
