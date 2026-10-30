@@ -48,5 +48,6 @@ npm run typecheck
 node src/main.ts today   # from the checkout (Node 22.18+)
 ```
 
-`npm pack` bundles `src/` into `dist/nexus.js` with esbuild (no runtime dependencies). Publishing follows the
-npm-publish skill: the user does the first `npm publish` and `npm trust`; no release workflow yet.
+`npm pack` bundles `src/` into `dist/nexus.js` with esbuild (no runtime dependencies). Published as
+`@lightblues/nexus` (0.1.0 on 2026-10-31, by hand; install with `npm install -g @lightblues/nexus`). Releases follow
+the npm-publish skill; trusted publishing (`npm trust` plus a `release.yml`) is not set up yet.
