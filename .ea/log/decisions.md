@@ -518,6 +518,43 @@ login, sessions, or per-device keys yet; the Mac app and sonar are unchanged.
 
 ---
 
+## SADR-020: The server summarizes; the CLI and the web app read it; settings live in nexus.db
+
+**Status**: Accepted (2026-10-31)
+
+**Context**: Six months of tracker data (~100k rows) sat unused: nothing read it,
+intake copied every raw row, and the numbers were wrong (sleep and the lock screen
+counted as `loginwindow`, a VS Code profile name taken for the project). Settings
+had two homes, `config.json` (Mackup-managed, watched) and the synced `setting`
+records, which could disagree. The user wanted to see and use the data, keep intake
+one-way like iris, and have a CLI that is not a host-oriented tool like Paseo.
+
+**Decision**:
+- Settings live in `nexus.db` (`settings` table, one row per leaf). `config.json`
+  is imported once and renamed `config.json.imported`; there is no file to edit or
+  watch. Sync is the way settings reach other Macs.
+- The server cleans tracker rows, sorts them into categories (rules: defaults in
+  code, the user's overrides in a server table), and stores one `day_summary` per
+  local day as a server-written record. Summaries rebuild after pushes and on start;
+  they are exported but never synced to the Macs.
+- intake's `sync-nexus` takes `day_summary` (and the pomodoro kinds) instead of raw
+  tracker rows.
+- Readers go through the server only: the `nexus` CLI (`cli/`, npm
+  `@lightblues/nexus`) and a read-only web app at `/app` with key login and
+  sessions. Edits from an agent go through the CLI (`config set` pushes a setting
+  record as device `cli`; `categories set`).
+
+**Consequences**:
+- Category rules are not a synced setting: the Mac app's `AppConfig` would drop an
+  unknown key and push its deletion.
+- Old rows are fixed at read time (lock screen dropped, one-hour cap, editor titles
+  reparsed), so the stored data stays as pushed; `SUMMARY_VERSION` rebuilds every
+  summary when the rules change.
+- The ~100k `tracker_record` rows intake already copied stay in its `raw`, frozen.
+- Mackup should stop managing `config.json`.
+
+---
+
 ## See also
 
 [`pitfalls.md`](../docs/pitfalls.md) — postmortem of traps the *implementations* of these

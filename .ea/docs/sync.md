@@ -88,7 +88,7 @@ docker run --rm -v "$PWD":/w -w /w/Packages/NexusSync swift:6.1-noble \
 
 ## HTTP
 
-Every route except `GET /health` needs `Authorization: Bearer <key>`. A key belongs to one user and is a write key (every route) or a read key (`/export/*` only); every route sees only that user's records. `NEXUS_KEY` and `NEXUS_READ_KEY` are the owner's. No key or a wrong key is 401; a read key on `/api/sync/*` is 403. Errors are `{ error: { code, message } }`.
+Every route except `GET /health` and the web pages needs `Authorization: Bearer <key>` or, for the read routes, the web app's session cookie (web.md). A key belongs to one user and is a write key (every route) or a read key (`/export/*` and the read API below); every route sees only that user's records. `NEXUS_KEY` and `NEXUS_READ_KEY` are the owner's. No key or a wrong key is 401; a read key on a write route is 403. Errors are `{ error: { code, message } }`.
 
 `GET /health` → `{ ok: true }`.
 
@@ -109,15 +109,43 @@ Every route except `GET /health` needs `Authorization: Bearer <key>`. A key belo
 | `too_large` | body over 64 KB of JSON |
 | `invalid` | the item is not an object, or `deleted` is not a boolean |
 
-Request errors: 400 `invalid_json` (body not a JSON object), 400 `invalid_params` (`device` missing or over 80 characters, `items` not an array), 413 `too_many_items` (over 1000 items), 413 `too_large` (request over 1 MB). A server error is 500 and nothing from that push is stored; retry it whole.
+The body may also carry `deviceName` (the Mac's computer name, shown on the devices page). Request errors: 400 `invalid_json` (body not a JSON object), 400 `invalid_params` (`device` missing, over 80 characters, or the reserved `server`; `items` not an array), 413 `too_many_items` (over 1000 items), 413 `too_large` (request over 1 MB). A server error is 500 and nothing from that push is stored; retry it whole.
 
 `GET /api/sync/pull?since=<cursor>&kinds=<a,b>` → `{ "records": [{ "kind", "id", "rev", "updatedAt", "deleted", "device", "body" }], "cursor": <number>, "more": <bool> }`. Oldest rev first. `since` defaults to 0; `kinds` (optional) filters, and an unknown kind is 400 `unknown_kind`. A page stops before 256 KB of records but always carries at least one; `more: true` means pull again now. An empty page returns `since` as the cursor. A bad `since` is 400 `invalid_params`.
 
-`GET /api/sync/status` → `{ "rev": <latest rev, 0 when empty>, "kinds": { "<kind>": { "records": <live>, "deleted": <tombstones> } } }`, every kind listed.
+`GET /api/sync/status` → `{ "rev": <latest rev, 0 when empty>, "kinds": { "<kind>": { "records": <live>, "deleted": <tombstones> } } }`, every synced kind listed.
 
-`GET /export/kinds` → `{ "app": "nexus", "kinds": [{ "kind", "description" }] }`: `pomodoro_session`, `pomodoro_project`, `pomodoro_tag`, `tracker_record`.
+`GET /export/kinds` → `{ "app": "nexus", "kinds": [{ "kind", "description" }] }`: `pomodoro_session`, `pomodoro_project`, `pomodoro_tag`, `tracker_record`, `day_summary`.
 
 `GET /export/changes?since=<cursor>&kinds=<a,b>&limit=<n>` → `{ "items": [{ "kind", "id", "updatedAt", "deleted", "data" }], "cursor": "<string>", "more": <bool> }`, in rev order. The cursor is opaque (a rev today). `kinds` filters to exported kinds and ignores the rest (so `setting` returns nothing); `limit` defaults to 100, max 500, and a page also stops before 256 KB. A delete is `deleted: true, data: null`. A bad `since` is 400.
+
+### Day summaries
+
+The server turns tracker rows and pomodoro sessions into one summary per local day (`services/server/src/summary.ts`, `days.ts`). Days split at midnight in `NEXUS_TZ`.
+
+Cleaning, before anything is counted: lock-screen rows (`com.apple.loginwindow`, `com.apple.ScreenSaver.Engine`) are dropped; no row counts for more than an hour (rows from before v1.3.2 could run across sleep); apps that report themselves as `Electron` get their name from the bundle id; VS Code and Cursor rows take file and project from the window title (`file — project`), overriding older wrong `contextProject` values; `www.` is dropped from domains. Rows from several Macs that overlap in time count once.
+
+Categories: `coding`, `ai`, `communication`, `meeting`, `notes`, `reading`, `entertainment`, `browsing`, `system`, `other`. The first match wins: the domain (and its parent domains), then the bundle id, then the app name (case-insensitive), the user's rules before the defaults in `summary.ts`. A browser on an unknown site is `browsing`; an unknown app is `other`. The user's rules live in the `categories` table (`PUT /api/categories`), not in a synced setting, so the Macs never see them.
+
+A summary (`day_summary` record, id `YYYY-MM-DD`, device `server`) holds `day`, `tz`, `version`, `activeSeconds`, `first`/`last` (unix seconds), the top 15 `categories`, `apps`, `projects` and `domains` with seconds, `blocks` (same-category stretches with gaps under 5 minutes, kept at 10 minutes or more, labeled by their main project, site or app), `pomodoro` (`work`, `workSeconds`, `completed`, per-project totals, and every session of the day), and `devices`. A push queues the days its records touch; they are rebuilt 20 seconds later and written only when they changed, so today's summary gets a new rev as the day fills in. On start, and when `SUMMARY_VERSION`, `NEXUS_TZ` or the user's rules change, every day is rebuilt (about two seconds for six months). Summaries are exported, never pushed or pulled: `day_summary` is not a sync kind.
+
+### Read API
+
+For the CLI and the web app; a read key or session is enough unless marked.
+
+| Route | Returns |
+|---|---|
+| `GET /api/me` | `{ user, name, access, tz, today }` |
+| `GET /api/days?from=&to=` | `{ tz, from, to, days: [summary] }`, stored summaries; default the last 30 days, at most 400 |
+| `GET /api/days/<day>` | the summary, computed fresh from the rows |
+| `GET /api/days/<day>/records` | `{ day, tz, activities, sessions }`: the cleaned, categorized rows (`id`, `device`, `start`, `end`, `seconds`, `app`, `bundleId`, `category`, `project`, `file`, `domain`, `url`, `title`) |
+| `GET /api/devices` | `{ devices: [{ device, name, firstPush, lastPush, trackerRecords, pomodoroSessions, lastActivity }] }` |
+| `GET /api/categories` | `{ categories, rules, defaults }` |
+| `PUT /api/categories` (write) | body `{ rules: { domains?, bundleIds?, apps? } }`, each mapping a name to a category; rebuilds every summary → `{ ok, rebuilt }` |
+| `POST /api/summaries/rebuild` (write) | rebuilds every summary → `{ rebuilt }` |
+| `GET /api/settings` (write) | `{ settings: { key: value } }`; a key ending in `token`, `secret`, `password` or `apiKey` shows `<set, N chars>` |
+
+A setting changes through `POST /api/sync/push` like any Mac's edit (the CLI pushes as device `cli`).
 
 ## Server
 
@@ -129,12 +157,15 @@ Request errors: 400 `invalid_json` (body not a JSON object), 400 `invalid_params
 | `NEXUS_READ_KEY` | empty | The owner's read key, for `/export/*` (intake). Must differ from `NEXUS_KEY` |
 | `NEXUS_DATABASE_URL` | required | Postgres; the schema is created on start |
 | `NEXUS_HOST` / `NEXUS_PORT` | `127.0.0.1` / `33033` | Put TLS in front (33032 is etho's) |
+| `NEXUS_TZ` | `Asia/Shanghai` | IANA zone whose midnights split days |
 
 Tables:
 
 - `users (id, name, created_at)`. The user `owner` is created on start; records from before users (v1.3.1 and earlier servers) are migrated to it.
 - `keys (hash, user_id, access, label, source, created_at)`: the sha256 of each key, never the key. On start the `env` keys are replaced with the current `NEXUS_KEY` and `NEXUS_READ_KEY`, so rotating them in `.env` and restarting revokes the old ones. `db` keys come from `npm run admin -- add-user <name>` or `add-key <user-id> [write|read]`, which print the key once.
-- `records (user_id, kind, id, rev, updated_at, device, deleted, body jsonb, PRIMARY KEY (user_id, kind, id))`, an index on `(user_id, rev)`, and the sequence `record_rev`. Revs are shared across users, so a user's cursor has gaps; clients only compare them.
+- `records (user_id, kind, id, rev, updated_at, device, deleted, body jsonb, start_at, PRIMARY KEY (user_id, kind, id))`, an index on `(user_id, rev)`, and the sequence `record_rev`. Revs are shared across users, so a user's cursor has gaps; clients only compare them. `start_at` is a tracker row's or session's `startTime`, set on push and indexed with `(user_id, kind)` so a day's rows are one range scan. Day summaries are rows here too.
+- `devices (user_id, device, name, first_push, last_push)`, updated on every push; seeded from `records` when the table is created.
+- `categories (user_id, rules jsonb, updated_at)`, `summary_state (user_id, version, tz)` (what built the stored summaries), `sessions (hash, user_id, access, created_at, expires_at)` (web sessions, hashed like keys).
 
 There is no sign-up or login yet: the key is the user's identity, as it was before users. Logs carry user and device ids and counts, never keys or bodies.
 

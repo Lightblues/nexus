@@ -16,9 +16,12 @@ NEXUS_KEY=… NEXUS_READ_KEY=… NEXUS_DATABASE_URL=postgres://nexus:…@127.0.0
 | Env | Default | Notes |
 |---|---|---|
 | `NEXUS_KEY` | required | The owner's bearer for every route |
-| `NEXUS_READ_KEY` | empty | The owner's bearer for `/export/*` only |
+| `NEXUS_READ_KEY` | empty | The owner's bearer for reads only: `/export/*`, the read API, web login |
 | `NEXUS_DATABASE_URL` | required | Postgres; the schema is created on start |
 | `NEXUS_HOST` / `NEXUS_PORT` | `127.0.0.1` / `33033` | Put TLS in front |
+| `NEXUS_TZ` | `Asia/Shanghai` | IANA zone whose midnights split days |
+
+The server also serves the web app from `web/` (`/`, `/login`, `/app`; `.ea/docs/web.md`) and builds day summaries (`.ea/docs/sync.md` → Day summaries).
 
 Node 22.18 or newer runs the `.ts` files directly. Units and nginx config for the deploy are in `deploy/`.
 
