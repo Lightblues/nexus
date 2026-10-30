@@ -453,6 +453,49 @@ stay unchanged. Layout and wiring: [`sync.md`](sync.md#swift-client).
 
 ---
 
+## SADR-018: Develop on devcloud, build on GitHub Actions, sign with a stable self-signed identity, test through a rolling beta
+**Status**: Accepted (2026-10-30)
+
+**Context**: Developing on a Mac kept that Mac online for agents, and every
+release was ad-hoc signed, so each Homebrew upgrade was a new signer to macOS:
+the Accessibility grant was lost and the tracker stopped until it was granted
+again. The devcloud host cannot build the app (no Xcode; no KVM, so no macOS VM),
+and AGS sandboxes are Linux only. The repository is public, so GitHub's macOS
+runners are free, and they already built v1.3.0 and v1.3.1.
+
+**Decision**: The code is written on devcloud (`/data/projects/app/nexus`); the
+Linux-testable parts (`Packages/NexusSync`, `services/server`) are tested there.
+Every push to `main` and every pull request is built on `macos-15` by
+`scripts/build-mac.sh`, launched (`scripts/ci-checks.sh launch`) and its DMG
+mounted (`ci-checks.sh dmg`). CI signs with one self-signed code-signing
+certificate (GitHub secrets `NEXUS_SIGN_P12`, `NEXUS_SIGN_P12_PASSWORD`; the
+original in devcloud `~/.config/nexus/signing/`), so the designated requirement
+is `identifier "site.easonsi.nexus" and certificate leaf = H"836e1c14…"` for
+every build. A push to `main` replaces the `nexus-beta` pre-release and the tap's
+`nexus@beta` cask (version `<short>-beta.<run>`); a Mac on `scripts/beta.sh
+install` upgrades within ten minutes. Tags still publish the stable cask. As in
+iris D008.
+
+**Rejected alternatives**:
+- A macOS VM on devcloud — no hardware virtualization there, and Apple's license
+  allows macOS VMs only on Apple hardware.
+- Cloud Macs (EC2 mac) — dedicated hosts billed per day for an occasional build.
+- An Apple Developer ID and notarization (SADR-006) — needs a paid account; a
+  self-signed identity is enough to keep TCC grants, and the cask's quarantine
+  strip already covers Gatekeeper.
+
+**Consequences**:
+- One more prompt per Mac: the first signed build is a new signer after the
+  ad-hoc ones, so Accessibility is granted once more; later upgrades keep it.
+- Losing the certificate costs the same one-time re-grant; rotate it only on
+  purpose. `CFBundleVersion` is the CI run number (`BUILD_NUMBER`), shown in the
+  launch banner.
+- An agent sees build results only through CI (`gh run watch`, `gh run view
+  --log-failed`), a few minutes per round; UI behavior is still judged on a Mac
+  running the beta.
+
+---
+
 ## Inherited / mapped from Electron ADRs
 
 The Electron-era ADR full text lives at

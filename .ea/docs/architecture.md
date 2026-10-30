@@ -264,9 +264,14 @@ with a "Open System Settings" button (`x-apple.systempreferences:`).
 `xcodebuild -archive` → `xcodebuild -exportArchive` → `create-dmg` → Sparkle appcast
 update.
 
-- Codesign: ad-hoc (`-` identity), same constraint as Electron build (no Apple Developer
-  ID). The Electron-side ADR-011 problem (`--deep` breaking nested signatures) doesn't
-  apply — single-binary app, no nested frameworks beyond Sparkle's `Autoupdate.app`.
+- Codesign: CI signs with a stable self-signed identity (SADR-018) so macOS keeps the
+  Accessibility grant across upgrades; local builds are ad-hoc (`-`). No Apple Developer
+  ID. `build-mac.sh` fails on a broken signature (`codesign --verify --strict --deep`) or
+  a missing architecture.
+- CI (`.github/workflows/build.yml`): every push to `main` and pull request builds,
+  launches the app, and mounts the DMG; a push to `main` also replaces the `nexus-beta`
+  pre-release and the `nexus@beta` cask; a `nexus-v*` tag publishes the release and the
+  `nexus` cask. On a Mac, `scripts/beta.sh install` follows the beta.
 - Quarantine: Homebrew cask `postflight` continues to strip `com.apple.quarantine`.
 - Universal binary: `ARCHS = arm64 x86_64`, single DMG drops the per-arch split. Cask
   simplifies (no `arch` block).

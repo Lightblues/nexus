@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
-# build-mac.sh — Build a universal-binary, ad-hoc-signed DMG of Nexus.
+# build-mac.sh — Build a universal-binary DMG of Nexus.
 #
 # Usage:
 #   ./scripts/build-mac.sh                  # uses Info.plist's CFBundleShortVersionString
-#   VERSION=1.0.0 ./scripts/build-mac.sh    # override version
+#   VERSION=1.0.0 ./scripts/build-mac.sh    # override the version in the DMG name
+#
+# Optional env: BUILD_NUMBER (CFBundleVersion), SIGN_IDENTITY and SIGN_KEYCHAIN
+# (default: ad-hoc; CI sets them from scripts/ci-signing.sh).
 #
 # Output:
 #   dist/Nexus-<version>.dmg
@@ -55,7 +58,10 @@ mkdir -p "$DIST_DIR" "$BUILD_DIR/archive" "$BUILD_DIR/export"
 # Archive (Release, universal). Using `archive` instead of `build` so the
 # resulting .xcarchive is what xcodebuild -exportArchive expects.
 echo "==> xcodebuild archive (Release, arm64+x86_64)"
-xcodebuild \
+# The archive's exit status is load-bearing: a compile error must fail here,
+# not later at -exportArchive. Keep it out of a pipeline.
+ARCHIVE_LOG="$BUILD_DIR/archive.log"
+if ! xcodebuild \
   -project "$PROJECT_DIR/Nexus.xcodeproj" \
   -scheme Nexus \
   -configuration Release \
@@ -66,7 +72,12 @@ xcodebuild \
   CODE_SIGN_IDENTITY="-" \
   CODE_SIGNING_REQUIRED=NO \
   CODE_SIGNING_ALLOWED=YES \
-  archive | grep -E "^\*\* |error:|warning:" || true
+  archive >"$ARCHIVE_LOG" 2>&1; then
+  grep -E "error:" "$ARCHIVE_LOG" || tail -50 "$ARCHIVE_LOG"
+  echo "xcodebuild archive failed (full log: $ARCHIVE_LOG)"
+  exit 1
+fi
+grep -E "^\*\* |warning:" "$ARCHIVE_LOG" || true
 
 # Export from the archive into a plain .app bundle.
 # We use a minimal exportOptions plist that asks for "developer-id" style
@@ -95,16 +106,25 @@ xcodebuild \
 APP_PATH="$BUILD_DIR/export/Nexus.app"
 [[ -d "$APP_PATH" ]] || { echo "Export failed: $APP_PATH not found"; exit 1; }
 
-# Re-apply ad-hoc signature deeply. xcodebuild already signs but we re-sign
-# explicitly so the resulting bundle is self-consistent regardless of whatever
-# signing identity was active in the user's keychain.
-echo "==> Ad-hoc codesign"
-codesign --force --deep --sign - "$APP_PATH"
-codesign --verify --verbose=2 "$APP_PATH" || true   # sanity check
+if [[ -n "${BUILD_NUMBER:-}" ]]; then
+  /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$APP_PATH/Contents/Info.plist"
+fi
 
-# Verify universal arch
+# Sign deeply, after the last change to the bundle. CI passes the stable
+# self-signed identity (SADR-018) so macOS keeps the Accessibility grant across
+# upgrades; without it the build is ad-hoc signed, as local builds are.
+SIGN_IDENTITY="${SIGN_IDENTITY:--}"
+echo "==> codesign (identity: $SIGN_IDENTITY)"
+codesign --force --deep --sign "$SIGN_IDENTITY" ${SIGN_KEYCHAIN:+--keychain "$SIGN_KEYCHAIN"} "$APP_PATH"
+codesign --verify --strict --deep --verbose=2 "$APP_PATH"
+codesign -d -r- "$APP_PATH" 2>&1 | grep designated
+
 echo "==> Architecture check"
-lipo -info "$APP_PATH/Contents/MacOS/Nexus"
+ARCHS_FOUND=$(lipo -archs "$APP_PATH/Contents/MacOS/Nexus")
+for arch in arm64 x86_64; do
+  [[ " $ARCHS_FOUND " == *" $arch "* ]] || { echo "Binary lacks $arch (has: $ARCHS_FOUND)"; exit 1; }
+done
+echo "    $ARCHS_FOUND"
 
 # --- DMG packaging ---
 DMG_PATH="$DIST_DIR/Nexus-$VERSION.dmg"

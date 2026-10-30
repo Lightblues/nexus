@@ -8,8 +8,15 @@ on:
         required: false
         default: ''
   push:
+    branches: [main]
     tags:
       - 'nexus-v*'
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
   build:
@@ -26,20 +33,36 @@ jobs:
       - name: Resolve version
         id: version
         run: |
+          SHORT=$(awk -F'"' '/CFBundleShortVersionString/ {print $2; exit}' project.yml)
           if [[ "${GITHUB_REF}" == refs/tags/nexus-v* ]]; then
             VERSION="${GITHUB_REF#refs/tags/nexus-v}"
           elif [[ -n "${{ github.event.inputs.version }}" ]]; then
             VERSION="${{ github.event.inputs.version }}"
+          elif [[ "${GITHUB_REF}" == refs/heads/main && "${{ github.event_name }}" == push ]]; then
+            VERSION="$SHORT-beta.${{ github.run_number }}"
           else
-            VERSION=$(awk -F'"' '/CFBundleShortVersionString/ {print $2; exit}' project.yml)
+            VERSION="$SHORT-dev.${{ github.run_number }}"
           fi
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-          echo "Building v$VERSION"
+          echo "Building v$VERSION (build ${{ github.run_number }})"
+
+      - name: Signing identity
+        env:
+          NEXUS_SIGN_P12: ${{ secrets.NEXUS_SIGN_P12 }}
+          NEXUS_SIGN_P12_PASSWORD: ${{ secrets.NEXUS_SIGN_P12_PASSWORD }}
+        run: ./scripts/ci-signing.sh
 
       - name: Build DMG
         env:
           VERSION: ${{ steps.version.outputs.VERSION }}
+          BUILD_NUMBER: ${{ github.run_number }}
         run: ./scripts/build-mac.sh
+
+      - name: Launch check
+        run: ./scripts/ci-checks.sh launch
+
+      - name: DMG check
+        run: ./scripts/ci-checks.sh dmg
 
       - name: Upload DMG artifact
         uses: actions/upload-artifact@v6
@@ -51,6 +74,78 @@ jobs:
 
       - name: Show dist contents
         run: ls -la dist/
+
+  # Rolling pre-release of main for testing between releases (SADR-018):
+  # the `nexus-beta` release holds the latest DMG and the tap's `nexus@beta`
+  # cask points at it.
+  beta:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    concurrency:
+      group: beta
+      cancel-in-progress: true
+    permissions:
+      contents: write
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v7
+        with:
+          path: artifacts
+
+      - name: Replace the nexus-beta pre-release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          DMG=$(find artifacts -name "Nexus-*.dmg" | head -1)
+          VERSION=$(basename "$DMG" .dmg); VERSION=${VERSION#Nexus-}
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "SHA=$(sha256sum "$DMG" | awk '{print $1}')" >> $GITHUB_ENV
+          gh release delete nexus-beta -R "$GITHUB_REPOSITORY" --cleanup-tag -y || true
+          gh release create nexus-beta "$DMG" -R "$GITHUB_REPOSITORY" --prerelease \
+            --target "$GITHUB_SHA" --title "Nexus beta $VERSION" \
+            --notes "Rolling build of main at ${GITHUB_SHA::7}. Install: brew install --cask lightblues/tap/nexus@beta"
+
+      - name: Checkout homebrew-tap
+        uses: actions/checkout@v5
+        with:
+          repository: lightblues/homebrew-tap
+          token: ${{ secrets.TAP_PUSH_TOKEN }}
+          path: tap
+
+      - name: Write and push the nexus@beta cask
+        working-directory: tap
+        run: |
+          cat > Casks/nexus@beta.rb <<CASK
+          cask "nexus@beta" do
+            version "$VERSION"
+            sha256 "$SHA"
+
+            url "https://github.com/Lightblues/nexus/releases/download/nexus-beta/Nexus-#{version}.dmg"
+            name "Nexus (beta)"
+            desc "Rolling build of Nexus main: Pomodoro timer, time tracker, command palette"
+            homepage "https://github.com/Lightblues/nexus"
+
+            auto_updates false
+            conflicts_with cask: "nexus"
+            depends_on macos: :ventura
+
+            app "Nexus.app"
+
+            postflight do
+              system_command "/usr/bin/xattr",
+                             args: ["-dr", "com.apple.quarantine", "#{appdir}/Nexus.app"],
+                             sudo: false
+            end
+          end
+          CASK
+          cat Casks/nexus@beta.rb
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Casks/nexus@beta.rb
+          git diff --cached --quiet && { echo "No changes"; exit 0; }
+          git commit -m "nexus@beta: $VERSION"
+          git push
 
   release:
     needs: build

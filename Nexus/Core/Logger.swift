@@ -24,9 +24,10 @@ enum Log {
     /// already records process start with its own metadata).
     static func writeLaunchBanner() {
         let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
         let pid = ProcessInfo.processInfo.processIdentifier
         FileLogSink.shared.writeBanner(
-            "===== Launched Nexus v\(v) (pid=\(pid)) ====="
+            "===== Launched Nexus v\(v) (build \(build), pid=\(pid)) ====="
         )
     }
 }

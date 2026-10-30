@@ -1,9 +1,9 @@
 # Nexus
 
 Native macOS menu bar toolkit — Pomodoro timer, time tracker, image uploader,
-command palette. Single-binary AppKit + SwiftUI app, ad-hoc signed.
+command palette. Single-binary AppKit + SwiftUI app, self-signed (no Apple Developer ID).
 
-See [`.ea/docs/swift/`](.ea/docs/swift/) for the full architecture and decision
+See [`.ea/docs/`](.ea/docs/spec.md) for the full architecture and decision
 log. The Electron-based predecessor is preserved at the `legacy/electron` git
 tag.
 
@@ -16,6 +16,13 @@ brew install --cask lightblues/tap/nexus
 Or grab the latest DMG from
 [Releases](https://github.com/Lightblues/nexus/releases).
 
+Beta (a build of every push to `main`, updated within ten minutes; data is kept):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Lightblues/nexus/main/scripts/beta.sh | bash -s install
+# back to stable: ~/Library/Application\ Support/site.easonsi.nexus/beta.sh uninstall
+```
+
 ## Build from source
 
 ```bash
@@ -24,7 +31,7 @@ xcodegen generate              # generate Nexus.xcodeproj from project.yml
 open Nexus.xcodeproj           # then ⌘R in Xcode
 ```
 
-Or produce a release DMG (universal, ad-hoc signed):
+Or produce a release DMG (universal; ad-hoc signed locally, CI signs with the project's identity):
 
 ```bash
 ./scripts/build-mac.sh         # → dist/Nexus-<version>.dmg
@@ -39,7 +46,7 @@ in the right folder, re-run `xcodegen generate`.
 
 ## Directory layout
 
-Mirrors [`.ea/docs/swift/architecture.md`](.ea/docs/swift/architecture.md):
+Mirrors [`.ea/docs/architecture.md`](.ea/docs/architecture.md):
 
 ```
 Nexus/
