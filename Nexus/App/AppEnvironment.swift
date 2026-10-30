@@ -21,7 +21,6 @@ final class AppEnvironment: ObservableObject {
     let sync: SyncCoordinator
 
     init() {
-        let config = ConfigService()
         let notifier = NotificationService.shared
         let database: Database
         do {
@@ -30,6 +29,7 @@ final class AppEnvironment: ObservableObject {
         } catch {
             fatalError("Failed to open nexus.db at \(Paths.dbFile.path): \(error)")
         }
+        let config = ConfigService(database: database)
         let pomodoroRepository = PomodoroRepository(database: database)
         let trackerRepository = TrackerRepository(database: database)
         let uploaderRepository = UploaderRepository(database: database)
@@ -40,7 +40,7 @@ final class AppEnvironment: ObservableObject {
         self.trackerRepository = trackerRepository
         self.uploaderRepository = uploaderRepository
         self.pomodoro = PomodoroService(repository: pomodoroRepository, config: config, notifier: notifier)
-        self.tracker = TrackerService(repository: trackerRepository, config: config)
+        self.tracker = TrackerService(repository: trackerRepository, config: config, notifier: notifier)
         self.uploader = UploaderService(repository: uploaderRepository, config: config)
         self.mainWindow = MainWindowController()
         self.palette = PaletteController()
@@ -63,9 +63,6 @@ final class AppEnvironment: ObservableObject {
 
         config.bootstrap()
         notifier.setup()
-
-        // After session data is in DB, populate project + tag catalogs.
-        await CatalogMigration.runIfNeeded(db: database)
 
         await pomodoroRepository.refresh()
         pomodoro.hydrate()

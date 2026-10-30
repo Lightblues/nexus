@@ -30,10 +30,17 @@ final class TrackerService: ObservableObject {
     private var permissionCheckTimer: Timer?
     /// The system Accessibility prompt is raised once per launch; macOS limits how often it shows.
     private var promptedAccessibility = false
+    /// Notifies once per launch when the tracker is still waiting for Accessibility, so a lost grant cannot go unnoticed for months.
+    private var waitingNoticeTask: Task<Void, Never>?
+    private let notifier: NotificationService?
 
-    init(repository: TrackerRepository, config: ConfigService) {
+    /// Frontmost while the screen is locked or the screen saver runs; never recorded as activity.
+    nonisolated static let lockScreenBundleIds: Set<String> = ["com.apple.loginwindow", "com.apple.ScreenSaver.Engine"]
+
+    init(repository: TrackerRepository, config: ConfigService, notifier: NotificationService? = nil) {
         self.repository = repository
         self.config = config
+        self.notifier = notifier
     }
 
     func bootstrap() async {
@@ -56,6 +63,7 @@ final class TrackerService: ObservableObject {
 
     private func applyConfig(_ cfg: TrackerConfig) {
         if !cfg.enabled {
+            waitingNoticeTask?.cancel(); waitingNoticeTask = nil
             stopPolling()
             status = .stopped
             Log.tracker.info("disabled by config")
@@ -68,10 +76,17 @@ final class TrackerService: ObservableObject {
             if !promptedAccessibility {
                 promptedAccessibility = true
                 Permissions.promptAccessibility()
+                waitingNoticeTask = Task { [weak self] in
+                    try? await Task.sleep(for: .seconds(600))
+                    guard !Task.isCancelled, let self, self.status == .waitingForPermission else { return }
+                    self.notifier?.notify(title: "Nexus is not tracking time",
+                                          body: "Accessibility access is off. Grant it in System Settings → Privacy & Security → Accessibility.")
+                }
             }
             schedulePermissionRecheck()
             return
         }
+        waitingNoticeTask?.cancel(); waitingNoticeTask = nil
         startPolling(interval: max(1, cfg.pollInterval))
     }
 
@@ -123,6 +138,10 @@ final class TrackerService: ObservableObject {
         if status == .idle { status = .running }
 
         guard let raw = ActiveAppProbe.fetch() else { return }
+        if let bid = raw.bundleId, Self.lockScreenBundleIds.contains(bid) {
+            status = .idle
+            return
+        }
 
         let (probe, context) = enricher.enrich(raw, config: cfg)
         let now = Date()
@@ -137,11 +156,22 @@ final class TrackerService: ObservableObject {
         )
 
         // Merge with last record if same activity
-        if let last = repository.lastRecord, Self.isSameActivity(last, candidate) {
+        if let last = repository.lastRecord, Self.canExtend(last, with: candidate, at: now, pollInterval: cfg.pollInterval) {
             await repository.extendLastRecord(to: now)
         } else {
             await repository.insert(candidate)
         }
+    }
+
+    /// Extend the last record only for the same activity seen within a few polls. A longer gap is
+    /// idle time, sleep, or the lock screen, and must not be counted.
+    nonisolated static func canExtend(_ last: WindowActivityRecord, with candidate: WindowActivityRecord,
+                                      at now: Date, pollInterval: Int) -> Bool {
+        isSameActivity(last, candidate) && now.timeIntervalSince(last.endTime) <= maxGap(pollInterval: pollInterval)
+    }
+
+    nonisolated static func maxGap(pollInterval: Int) -> TimeInterval {
+        max(15, TimeInterval(3 * max(1, pollInterval)))
     }
 
     /// Two records describe "the same activity" if app + context.file both match.

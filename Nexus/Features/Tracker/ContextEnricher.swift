@@ -1,21 +1,12 @@
 import Foundation
 
-/// Adds project/file/url/domain context to a probe based on app type.
-/// - VSCode/Cursor: parses window title in "filename — project" form
+/// Adds project/file/url/domain context to a probe based on app type, for apps named in
+/// `tracker.enrichApps` only (the default lists every app below):
+/// - VSCode/Cursor: parses the window title, "file — folder[ — profile]"
 /// - Browsers: extracts URL via cached NSAppleScript (one compile per browser)
 /// - Other apps: rawTitle only
 @MainActor
 final class ContextEnricher {
-    private static let enrichBundleIds: Set<String> = [
-        "com.microsoft.VSCode",
-        "com.microsoft.VSCodeInsiders",
-        "com.todesktop.230313mzl4w4u92",  // Cursor
-        "com.google.Chrome",
-        "com.google.Chrome.beta",
-        "com.apple.Safari",
-        "company.thebrowser.Browser"      // Arc
-    ]
-
     private static let vscodeFamily: Set<String> = [
         "com.microsoft.VSCode",
         "com.microsoft.VSCodeInsiders",
@@ -33,9 +24,7 @@ final class ContextEnricher {
     /// Enrich an existing probe in place. May fetch URL via Apple Events.
     func enrich(_ probe: ActiveProbe, config: TrackerConfig) -> (probe: ActiveProbe, context: ActivityContext?) {
         var probe = probe
-        let shouldEnrich = (probe.bundleId.map(Self.enrichBundleIds.contains) ?? false)
-            || config.enrichApps.contains(probe.app)
-        guard shouldEnrich else { return (probe, nil) }
+        guard config.enrichApps.contains(probe.app) else { return (probe, nil) }
 
         // Browser URL
         if let bid = probe.bundleId, Self.isBrowser(bundleId: bid) {
@@ -47,15 +36,8 @@ final class ContextEnricher {
             ctx.rawTitle = title
         }
 
-        // VSCode/Cursor title: "filename — project"  (em-dash separator)
         if let bid = probe.bundleId, Self.vscodeFamily.contains(bid), let title = probe.title {
-            let parts = title.components(separatedBy: " — ")
-            if parts.count >= 2 {
-                ctx.file = parts.first?.trimmingCharacters(in: .whitespaces)
-                ctx.project = parts.last?.trimmingCharacters(in: .whitespaces)
-            } else if let first = parts.first {
-                ctx.file = first.trimmingCharacters(in: .whitespaces)
-            }
+            (ctx.file, ctx.project) = Self.parseEditorTitle(title)
         }
 
         // Browser: store URL/domain, fall back to title for `file`
@@ -68,6 +50,18 @@ final class ContextEnricher {
         }
 
         return (probe, ctx.isEmpty ? nil : ctx)
+    }
+
+    /// VS Code's default title is "file — folder — profile" (the profile only when not Default);
+    /// the folder is the project, with a multi-root " (Workspace)" suffix dropped.
+    nonisolated static func parseEditorTitle(_ title: String) -> (file: String?, project: String?) {
+        let parts = title.components(separatedBy: " — ").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        guard let first = parts.first else { return (nil, nil) }
+        let file = first.hasPrefix("● ") ? String(first.dropFirst(2)) : first
+        guard parts.count >= 2 else { return (file, nil) }
+        var project = parts[1]
+        if project.hasSuffix(" (Workspace)") { project = String(project.dropLast(" (Workspace)".count)) }
+        return (file, project)
     }
 
     // MARK: - Internals

@@ -1,187 +1,65 @@
 # Tracker
 
-Active-window time tracker built on **native AX APIs** (single Accessibility
-grant, ~50× lower per-poll cost than the AppleScript polling used by the
-Electron predecessor — see `legacy-electron/decisions.md` ADR-001).
+Records which app (and, for editors and browsers, which project, file, or site) is in
+front, as rows in `tracker_records` in nexus.db. The server turns the rows into
+categorized day summaries ([sync.md](sync.md) → Day summaries).
 
-## Tracking pipeline
+## Pipeline (`TrackerService.tick`, every `tracker.pollInterval` s)
 
 ```
-Timer (every cfg.pollInterval s)
-  ↓
-Permissions.isAXTrusted? ──no──→ disable polling, surface banner
-  ↓ yes
-HIDIdleTime > cfg.idleThreshold? ──yes──→ skip
+tracker.enabled? ──no──→ stopped
+Accessibility granted? ──no──→ waitingForPermission: system prompt once per launch,
+  ↓ yes                        a notification after 10 min, recheck every 2 s
+HID idle ≥ tracker.idleThreshold? ──yes──→ idle, nothing recorded
   ↓ no
-ActiveAppProbe.fetch()  →  (bundleId, appName, windowTitle)
+ActiveAppProbe.fetch()  →  app name, bundle id, focused window title (AX)
+lock screen / screen saver in front? ──yes──→ idle, nothing recorded
   ↓
-ContextEnricher.enrich(probe)  →  ActivityContext
+ContextEnricher.enrich  →  project, file, url, domain (apps in tracker.enrichApps)
   ↓
-TrackerService.merge(probe, context)
-  if same app+file+url as current head → extend endTime
-  else → finalize current, start new
-  ↓
-buffer in memory; flush every 5 min or on app shutdown
-  ↓
-~/.ea/nexus/tracker/YYYY-MM-DD.json
+same app + file as the last row, and the last row ended ≤ 3 polls (min 15 s) ago?
+  yes → extend its end_time      no → insert a new row
 ```
 
-## Active App Probe (`Tracker/ActiveAppProbe.swift`)
+The gap rule is what keeps idle time, sleep, and the lock screen out: after any of
+them, the next poll starts a new row instead of stretching the old one across the gap.
 
-Replaces the AppleScript poll with two AX calls:
+## Probe and enrichment
 
-```swift
-struct ActiveProbe {
-    let bundleId: String
-    let appName: String
-    let windowTitle: String
-    let url: String?      // browser-only, set by enricher
-}
+- `ActiveAppProbe`: `NSWorkspace.frontmostApplication` plus the focused window's
+  `kAXTitleAttribute`. VS Code and Cursor report themselves as Electron, so their
+  names come from a bundle-id map (`Code`, `Code - Insiders`, `Cursor`).
+- `ContextEnricher` runs only for apps named in `tracker.enrichApps` (default: Code,
+  Code - Insiders, Cursor, Google Chrome, Google Chrome Beta, Safari, Arc; the pre-v1.3.2
+  default `["Code", "Google Chrome"]` is upgraded to it on load).
+  - Editors: `parseEditorTitle` reads VS Code's "file — folder — profile" title; the
+    folder is the project (a " (Workspace)" suffix dropped, an SSH remote kept).
+  - Browsers: the active tab's URL through a compiled `NSAppleScript` per browser (one
+    Apple Events grant per browser; denial disables it for that browser until relaunch).
+  - Every enriched row keeps the raw title in `context_raw_title`.
+- `tracker.recordTitle` decides whether `title` is stored for apps that are not enriched.
 
-enum ActiveAppProbe {
-    static func fetch() -> ActiveProbe? {
-        guard let app = NSWorkspace.shared.frontmostApplication else { return nil }
-        let pid = app.processIdentifier
-        let axApp = AXUIElementCreateApplication(pid)
-        var focusedWindow: AnyObject?
-        AXUIElementCopyAttributeValue(axApp, kAXFocusedWindowAttribute as CFString,
-                                      &focusedWindow)
-        guard let window = focusedWindow else { return nil }
-        var titleRef: AnyObject?
-        AXUIElementCopyAttributeValue(window as! AXUIElement,
-                                      kAXTitleAttribute as CFString, &titleRef)
-        let title = titleRef as? String ?? ""
-        return ActiveProbe(
-            bundleId: app.bundleIdentifier ?? "",
-            appName: app.localizedName ?? "",
-            windowTitle: title,
-            url: nil
-        )
-    }
-}
-```
+## Storage
 
-**Performance**: AX calls return in well under 1 ms vs ~50 ms for `osascript` in
-ADR-001. At 5-second poll interval the difference is negligible per-poll, but it
-matters for short-interval debugging and battery (no `osascript` process spawn).
+`tracker_records`: `start_time`, `end_time`, `duration` (seconds), `app`, `bundle_id`,
+`title`, `context_project`, `context_file`, `context_url`, `context_domain`,
+`context_raw_title`, `uid` (sync id). Sync pushes rows on its 5-minute timer.
+`TrackerRepository` keeps the last row this Mac wrote (by uid) for extension across
+launches.
 
-## Idle Detection (`Tracker/IdleDetector.swift`)
+## UI (`Features/Tracker/Views/`)
 
-The Electron version used `powerMonitor.getSystemIdleTime()`. Swift equivalent uses
-the IOKit HID service:
+The main window's Tracker route for one day: a 24 h timeline, a donut of the top apps,
+and a ranked app list that expands into files and sites.
 
-```swift
-enum IdleDetector {
-    static func systemIdleSeconds() -> TimeInterval {
-        var iter: io_iterator_t = 0
-        IOServiceGetMatchingServices(kIOMainPortDefault,
-            IOServiceMatching("IOHIDSystem"), &iter)
-        defer { IOObjectRelease(iter) }
-        let entry = IOIteratorNext(iter)
-        defer { IOObjectRelease(entry) }
-        var props: Unmanaged<CFMutableDictionary>?
-        IORegistryEntryCreateCFProperties(entry, &props, kCFAllocatorDefault, 0)
-        let dict = props?.takeRetainedValue() as? [String: Any] ?? [:]
-        let ns = dict["HIDIdleTime"] as? UInt64 ?? 0
-        return TimeInterval(ns) / 1_000_000_000  // ns → s
-    }
-}
-```
-
-Skip the merge step if `systemIdleSeconds() >= cfg.idleThreshold`.
-
-## Context Enrichment (`Tracker/ContextEnricher.swift`)
-
-Per-app strategies, picked by bundle id:
-
-| Bundle ID | Strategy |
-|---|---|
-| `com.microsoft.VSCode`, `com.todesktop.230313mzl4w4u92` (Cursor) | Title parser: `"file — project"` → `(file, project)` |
-| `com.google.Chrome`, `com.apple.Safari`, `company.thebrowser.Browser` | URL via Apple Events (`tell application "Chrome" to get URL of active tab of front window`) |
-| (default) | bundleId + window title only |
-
-For browsers we **must** keep an Apple Events path (no native API exposes browser
-tab URL). But unlike Electron's full `osascript` invocation per poll, we use a single
-persistent `NSAppleScript` instance compiled once and executed per call — ~5 ms vs
-~50 ms.
-
-If `AEDeterminePermissionToAutomateTarget` returns denied, fall back to title-only
-(no URL/domain enrichment for that app). Surface in Settings → Tracker.
-
-## Merge Algorithm (unchanged from Electron)
-
-Same comparison key (`app + context.file`), same finalize-on-change semantics. Code
-moves into `TrackerService.merge(_:)`. Tests use the same fixtures.
-
-## Storage (`TrackerStore.swift`)
-
-`tracker/YYYY-MM-DD.json` schema:
-
-```swift
-struct DailyTrackerData: Codable {
-    let date: String           // "YYYY-MM-DD"
-    let version: Int           // = 1
-    var records: [WindowActivityRecord]
-    var meta: TrackerDayMeta
-}
-```
-
-In-memory buffer flushed every 5 min or on `applicationWillTerminate`. Each flush:
-1. Serialize current day's records.
-2. Write to `tracker/YYYY-MM-DD.json.tmp`.
-3. `rename` over the existing file (atomic).
-4. Update `meta.totalActiveTime` and `meta.appSummary` aggregates.
-
-## UI (`Features/Tracker/Views/TrackerView.swift`)
-
-Lives in MainWindow's `tracker` route. Layout:
-
-```
-┌─────────────────────────────────────────┐
-│ Time Tracker             [date picker]  │
-├─────────────────────────────────────────┤
-│ Timeline (00:00 ────────────── 24:00)   │
-├──────────────────┬──────────────────────┤
-│  Donut chart     │  APP rank list       │
-│  (top 5 + other) │  (expandable)        │
-└──────────────────┴──────────────────────┘
-```
-
-- **TrackerTimeline** — `Canvas`-drawn 24h horizontal bar. Per-app deterministic color
-  via `appName.hashColor()`. Hover shows time range + app + file in an overlay.
-- **AppUsageDonut** — Swift Charts `SectorMark`. Center label = total time.
-- **AppRankList** — `List` with disclosure rows; expanding shows top contexts (file/url
-  breakdown) sorted by duration.
-
-## Permissions
-
-- AX: `Permissions.promptAccessibility()` raises the macOS prompt the first time
-  `TrackerService.applyConfig` finds the tracker enabled but untrusted, once per launch;
-  the 2 s recheck then resumes polling when access is granted. Builds signed with the
-  stable identity keep the grant across upgrades (SADR-018).
-- Apple Events (for browser URL): requested lazily on first browser title needing
-  URL. If denied, log + degrade. Both cases surface in Settings → Tracker as a
-  banner with an "Open System Settings" deep link.
-
-## Commands (initial)
+## Commands
 
 | ID | Action |
 |---|---|
-| `tracker.toggle` | Enable/disable polling |
-| `tracker.openToday` | Open MainWindow → tracker route, today selected |
-| `tracker.flushNow` | Force a buffer flush (debug) |
+| `tracker.toggle` | Enable or disable polling |
+| `tracker.openToday` | Open the Tracker route on today |
 
-## Config (unchanged)
+## Config
 
-```yaml
-tracker:
-  enabled: true
-  pollInterval: 5
-  idleThreshold: 120
-  recordTitle: false
-  enrichApps: ['Code', 'Google Chrome']
-```
-
-`enrichApps` continues to whitelist which app names get URL/title enrichment to
-avoid prompting Apple Events permission for apps the user doesn't want tracked
-deeply.
+`tracker.enabled` (true), `pollInterval` (5 s), `idleThreshold` (120 s),
+`recordTitle` (false), `enrichApps` (above).
