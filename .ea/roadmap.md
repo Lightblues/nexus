@@ -17,8 +17,8 @@ What later rounds stand on. No new features.
 2. ~~**Permissions survive upgrades.**~~ Done 2026-10-30: the stable identity, and the Accessibility prompt on first start (nexus-002); checked by the user on the beta.
 3. ~~**Users on the server.**~~ Done 2026-10-30 (SADR-019): `users` and `keys` tables, every record owned by a user, the existing keys are the owner's; `npm run admin` adds users and keys. No login yet.
 4. **Docs layout.** ~~`AGENTS.md` (with `CLAUDE.md` a symlink), `docs/README.md` as the index (from `spec.md`), decisions to `log/decisions.md` with the SADR numbers kept~~ (done 2026-10-30). Still: every `docs/` page checked against the code (`tracker.md` still describes the Electron JSON store; `.ea/report/` folded into `log/`).
-5. **Tests.** A unit test target run by CI (nexus-013).
-6. **Open fixes.** Fix nexus-005, 007, 009, 014, 015; nexus-004 goes into round 2's op registry; nexus-006 and 008 into round 2's review (sessions are edited through the CLI, not the web app). Fresh-Mac first contact: seeded default projects and tags lose to the server's copies. The casks' `postflight` is deprecated in Homebrew 7 (warning on install).
+5. ~~**Tests.**~~ Done 2026-10-30: `NexusTests` (28 tests of pure logic, hosted in an app that starts no services) runs on every push before the build (nexus-013).
+6. **Open fixes.** nexus-009, 014, 015 done 2026-10-30. Still: nexus-005 (needs a decision: the fix narrows enrichment for configs that hold the old two-app default), nexus-007; nexus-004 goes into round 2's op registry; nexus-006 and 008 into round 2's review (sessions are edited through the CLI, not the web app). Fresh-Mac first contact: seeded default projects and tags lose to the server's copies. The casks' `postflight` is deprecated in Homebrew 7 (warning on install).
 
 ## 2. Agent-native review and agent surface
 
