@@ -145,7 +145,7 @@ final class TrackerService: ObservableObject {
     }
 
     /// Two records describe "the same activity" if app + context.file both match.
-    static func isSameActivity(_ a: WindowActivityRecord, _ b: WindowActivityRecord) -> Bool {
+    nonisolated static func isSameActivity(_ a: WindowActivityRecord, _ b: WindowActivityRecord) -> Bool {
         guard a.app == b.app else { return false }
         return a.context?.file == b.context?.file
     }
