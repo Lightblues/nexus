@@ -16,7 +16,8 @@ HOME_DIR="$HOME/Library/Application Support/site.easonsi.nexus"
 SELF="$HOME_DIR/beta.sh"
 LOG="$HOME/Library/Logs/site.easonsi.nexus/beta-update.log"
 SCRIPT_URL="https://raw.githubusercontent.com/Lightblues/nexus/main/scripts/beta.sh"
-export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH" HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1
+export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH" HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 \
+  HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*"; }
 installed() { brew list --cask "$1" >/dev/null 2>&1; }
@@ -66,7 +67,8 @@ update() {
   local was_running=0; running && was_running=1
   log "upgrading $(brew list --cask --versions nexus@beta)"
   quit_app
-  brew upgrade --cask nexus@beta
+  # Relaunch even when brew exits non-zero for something unrelated to the cask.
+  brew upgrade --cask nexus@beta || log "brew upgrade exited $?"
   [[ $was_running == 1 ]] && open -a /Applications/Nexus.app
   log "now $(brew list --cask --versions nexus@beta)"
 }
