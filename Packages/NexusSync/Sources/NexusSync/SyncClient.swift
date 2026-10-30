@@ -21,21 +21,23 @@ public enum SyncError: Error, Equatable {
 public struct SyncClient: SyncAPI {
     public let baseURL: URL
     private let key: String
+    /// Shown for this Mac on the server's devices page; the device id stays the identity.
+    private let deviceName: String?
     private let session: URLSession
 
-    public init(baseURL: URL, key: String, session: URLSession = .shared) {
-        self.baseURL = baseURL; self.key = key; self.session = session
+    public init(baseURL: URL, key: String, deviceName: String? = nil, session: URLSession = .shared) {
+        self.baseURL = baseURL; self.key = key; self.deviceName = deviceName; self.session = session
     }
 
     public var endpoint: String { baseURL.absoluteString }
 
     public func push(device: String, items: [SyncRecord]) async throws -> [PushResult] {
-        struct Body: Encodable { let device: String; let items: [SyncRecord] }
+        struct Body: Encodable { let device: String; let deviceName: String?; let items: [SyncRecord] }
         struct Answer: Decodable { let results: [PushResult] }
         var request = URLRequest(url: baseURL.appendingPathComponent("api/sync/push"))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONEncoder().encode(Body(device: device, items: items))
+        request.httpBody = try JSONEncoder().encode(Body(device: device, deviceName: deviceName, items: items))
         let results = try await send(request, as: Answer.self).results
         guard results.count == items.count else { throw SyncError.badResponse }
         return results

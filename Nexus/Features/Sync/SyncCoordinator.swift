@@ -2,6 +2,7 @@ import AppKit
 import Combine
 import GRDB
 import NexusSync
+import SystemConfiguration
 
 /// Owns the app's one `SyncEngine` and decides when it runs: at launch, every 5 minutes,
 /// after the Mac wakes, and 5 s after the last pomodoro or settings edit. Tracker records,
@@ -84,7 +85,7 @@ final class SyncCoordinator: ObservableObject {
         nextAllowed = .distantPast
         lastError = nil
         guard started, connection.isActive, let url = connection.serverURL else { engine = nil; return }
-        engine = SyncEngine(db: database.queue, api: SyncClient(baseURL: url, key: connection.key),
+        engine = SyncEngine(db: database.queue, api: SyncClient(baseURL: url, key: connection.key, deviceName: SCDynamicStoreCopyComputerName(nil, nil) as String?),
                             settings: ConfigSettingsStore(config: config))
         schedule(in: 0)
     }
