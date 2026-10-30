@@ -4,7 +4,7 @@ Settings, pomodoro data, and tracker records follow the user across Macs. Each M
 
 ```
 MBP  ─┐                                         ┌─ intake (export feed, read key)
-      ├─ HTTPS /api/sync/* (NEXUS_KEY) ── nexus server ── Postgres (db nexus): records
+      ├─ HTTPS /api/sync/* (a user's key) ── nexus server ── Postgres (db nexus): records
 mini ─┘                                         │
 ```
 
@@ -88,7 +88,7 @@ docker run --rm -v "$PWD":/w -w /w/Packages/NexusSync swift:6.1-noble \
 
 ## HTTP
 
-Every route except `GET /health` needs `Authorization: Bearer <key>`. `NEXUS_KEY` opens every route; `NEXUS_READ_KEY` opens `/export/*` only. No key or a wrong key is 401; the read key on `/api/sync/*` is 403. Errors are `{ error: { code, message } }`.
+Every route except `GET /health` needs `Authorization: Bearer <key>`. A key belongs to one user and is a write key (every route) or a read key (`/export/*` only); every route sees only that user's records. `NEXUS_KEY` and `NEXUS_READ_KEY` are the owner's. No key or a wrong key is 401; a read key on `/api/sync/*` is 403. Errors are `{ error: { code, message } }`.
 
 `GET /health` → `{ ok: true }`.
 
@@ -125,11 +125,17 @@ Request errors: 400 `invalid_json` (body not a JSON object), 400 `invalid_params
 
 | Env | Default | Notes |
 |---|---|---|
-| `NEXUS_KEY` | required | Bearer for every route; each Mac holds it |
-| `NEXUS_READ_KEY` | empty | Bearer for `/export/*` only (intake). Must differ from `NEXUS_KEY` |
+| `NEXUS_KEY` | required | The owner's write key; each of the user's Macs holds it |
+| `NEXUS_READ_KEY` | empty | The owner's read key, for `/export/*` (intake). Must differ from `NEXUS_KEY` |
 | `NEXUS_DATABASE_URL` | required | Postgres; the schema is created on start |
 | `NEXUS_HOST` / `NEXUS_PORT` | `127.0.0.1` / `33033` | Put TLS in front (33032 is etho's) |
 
-Table: `records (kind, id, rev, updated_at, device, deleted, body jsonb, PRIMARY KEY (kind, id))`, an index on `rev`, and the sequence `record_rev`. Logs carry device ids and counts, never keys or bodies.
+Tables:
+
+- `users (id, name, created_at)`. The user `owner` is created on start; records from before users (v1.3.1 and earlier servers) are migrated to it.
+- `keys (hash, user_id, access, label, source, created_at)`: the sha256 of each key, never the key. On start the `env` keys are replaced with the current `NEXUS_KEY` and `NEXUS_READ_KEY`, so rotating them in `.env` and restarting revokes the old ones. `db` keys come from `npm run admin -- add-user <name>` or `add-key <user-id> [write|read]`, which print the key once.
+- `records (user_id, kind, id, rev, updated_at, device, deleted, body jsonb, PRIMARY KEY (user_id, kind, id))`, an index on `(user_id, rev)`, and the sequence `record_rev`. Revs are shared across users, so a user's cursor has gaps; clients only compare them.
+
+There is no sign-up or login yet: the key is the user's identity, as it was before users. Logs carry user and device ids and counts, never keys or bodies.
 
 Deploy (same setup as iris): `nexus.service` on the cpu host from this repo with `services/server/.env` (not committed); Postgres database and role `nexus` in the shared container; a reverse SSH tunnel (`ssh-tunnel-tx04-33033.service`) publishes `127.0.0.1:33033` on tx04, where nginx serves `https://nexus.easonsi.site` with certbot TLS. Unit and nginx files, and the deploy steps: `services/server/` (`deploy/`, README).

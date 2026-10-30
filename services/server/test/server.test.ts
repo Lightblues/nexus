@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { PGlite } from '@electric-sql/pglite'
 import { startServer } from '../src/server.ts'
-import { MAX_BODY_BYTES, MAX_PUSH_ITEMS, migrate, openStore, type Db, type PushResult, type StoredRecord } from '../src/store.ts'
+import { MAX_BODY_BYTES, MAX_PUSH_ITEMS, OWNER, addKey, addUser, listUsers, migrate, openStore, type Db, type PushResult, type StoredRecord } from '../src/store.ts'
 
 const KEY = 'write-key'
 const READ = 'read-key'
@@ -24,8 +24,8 @@ function pgliteDb(): Db {
 type Pulled = { records: StoredRecord[]; cursor: number; more: boolean }
 type Exported = { items: { kind: string; id: string; updatedAt: number; deleted: boolean; data: unknown }[]; cursor: string; more: boolean }
 
-async function boot() {
-  const server = await startServer({ key: KEY, readKey: READ, host: '127.0.0.1', port: 0, db: pgliteDb() })
+async function boot(db = pgliteDb(), key = KEY, readKey = READ) {
+  const server = await startServer({ key, readKey, host: '127.0.0.1', port: 0, db })
   const base = `http://127.0.0.1:${server.port}`
   const headers = (key: string) => ({ authorization: `Bearer ${key}`, 'content-type': 'application/json' })
   return {
@@ -33,16 +33,16 @@ async function boot() {
     get: (path: string, key = KEY) => fetch(`${base}${path}`, { headers: key ? headers(key) : {} }),
     post: (path: string, body: unknown, key = KEY) =>
       fetch(`${base}${path}`, { method: 'POST', headers: headers(key), body: typeof body === 'string' ? body : JSON.stringify(body) }),
-    async push(device: string, items: unknown[]): Promise<PushResult[]> {
-      const res = await this.post('/api/sync/push', { device, items })
+    async push(device: string, items: unknown[], key = KEY): Promise<PushResult[]> {
+      const res = await this.post('/api/sync/push', { device, items }, key)
       assert.equal(res.status, 200)
       return (await res.json() as { results: PushResult[] }).results
     },
-    async pullAll(since = 0, kinds = ''): Promise<Pulled> {
+    async pullAll(since = 0, kinds = '', key = KEY): Promise<Pulled> {
       const records: StoredRecord[] = []
       let cursor = since
       for (;;) {
-        const page = await (await this.get(`/api/sync/pull?since=${cursor}${kinds ? `&kinds=${kinds}` : ''}`)).json() as Pulled
+        const page = await (await this.get(`/api/sync/pull?since=${cursor}${kinds ? `&kinds=${kinds}` : ''}`, key)).json() as Pulled
         records.push(...page.records)
         cursor = page.cursor
         if (!page.more) return { records, cursor, more: false }
@@ -190,8 +190,8 @@ test('a pull page stops at 256 KB but always carries one record', async () => {
   const db = pgliteDb()
   await migrate(db)
   const store = openStore(db)
-  await store.push('mbp', ['a', 'b'].map(id => ({ kind: 'pomodoro_tag', id, updatedAt: 1, body: { createdAt: 1 } })))
-  const tiny = await store.pull(0, undefined, 10)
+  await store.push(OWNER, 'mbp', ['a', 'b'].map(id => ({ kind: 'pomodoro_tag', id, updatedAt: 1, body: { createdAt: 1 } })))
+  const tiny = await store.pull(OWNER, 0, undefined, 10)
   assert.deepEqual(tiny.records.map(r => r.id), ['a'])
   assert.equal(tiny.more, true)
   await db.close()
@@ -278,5 +278,67 @@ test('export pages every exported kind in rev order and never serves settings', 
     assert.equal((await server.get('/export/changes?since=x', READ)).status, 400)
   } finally {
     await server.stop()
+  }
+})
+
+test('each user syncs and exports only its own records', async () => {
+  const db = pgliteDb()
+  const server = await boot(db)
+  try {
+    const other = await addUser(db, 'guest')
+    const otherKey = await addKey(db, other.id, 'write', 'guest mac')
+    const otherRead = await addKey(db, other.id, 'read')
+
+    await server.push('mbp', [setting('pomodoro.workDuration', 1, 25), tracker('same-uid', 1, 'Code')])
+    const pushed = await server.push('guest-mac', [setting('pomodoro.workDuration', 1, 50), tracker('same-uid', 1, 'Xcode')], otherKey)
+    assert.ok(pushed.every(r => r.rev && !r.stale), 'the same kind and id is a separate record per user')
+
+    const mine = await server.pullAll()
+    const theirs = await server.pullAll(0, '', otherKey)
+    assert.deepEqual(mine.records.map(r => (r.body as { value?: unknown; app?: string }).value ?? (r.body as { app: string }).app), [25, 'Code'])
+    assert.deepEqual(theirs.records.map(r => (r.body as { value?: unknown; app?: string }).value ?? (r.body as { app: string }).app), [50, 'Xcode'])
+
+    const status = await (await server.get('/api/sync/status', otherKey)).json() as { rev: number; kinds: Record<string, { records: number }> }
+    assert.equal(status.kinds.tracker_record.records, 1)
+    assert.equal(status.rev, theirs.cursor)
+
+    const exported = await (await server.get('/export/changes', otherRead)).json() as Exported
+    assert.deepEqual(exported.items.map(i => (i.data as { app: string }).app), ['Xcode'])
+    assert.equal((await server.get('/api/sync/pull', otherRead)).status, 403)
+
+    const users = await listUsers(db)
+    assert.deepEqual(users.map(u => [u.id, u.keys, u.records]), [[OWNER, 2, 2], [other.id, 2, 2]])
+  } finally {
+    await server.stop()
+  }
+})
+
+test('a database from before users is migrated to the owner, and env keys follow the environment', async () => {
+  const db = pgliteDb()
+  await db.query(`
+    CREATE SEQUENCE record_rev;
+    CREATE TABLE records (kind text NOT NULL, id text NOT NULL, rev bigint NOT NULL, updated_at bigint NOT NULL, device text NOT NULL,
+      deleted boolean NOT NULL DEFAULT false, body jsonb, PRIMARY KEY (kind, id));
+    CREATE INDEX records_rev ON records (rev);
+    INSERT INTO records VALUES ('setting', 'ui.theme', nextval('record_rev'), 1, 'mbp', false, '{"value": "dark"}');
+  `)
+  const first = await boot(db)
+  const before = await first.pullAll()
+  assert.deepEqual(before.records.map(r => [r.kind, r.id, r.rev]), [['setting', 'ui.theme', 1]])
+  const [written] = await first.push('mbp', [setting('ui.theme', 2, 'light')])
+  assert.equal(written.rev, 2, 'the rev sequence carries on')
+  await first.stop()
+
+  const db2 = pgliteDb()
+  const a = await boot({ ...db2, close: async () => {} })
+  await a.push('mbp', [setting('x', 1, 1)])
+  await a.stop()
+  const reopened = await boot(db2, 'rotated-key', '')
+  try {
+    assert.equal((await reopened.get('/api/sync/status')).status, 401, 'the old NEXUS_KEY stops working')
+    assert.equal((await reopened.get('/export/changes', READ)).status, 401, 'an unset NEXUS_READ_KEY is dropped')
+    assert.equal((await reopened.pullAll(0, '', 'rotated-key')).records.length, 1)
+  } finally {
+    await reopened.stop()
   }
 })

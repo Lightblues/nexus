@@ -8,13 +8,15 @@ Spec (record kinds, HTTP contract, merge rule, deploy): [`.ea/docs/sync.md`](../
 npm install
 npm test           # in-memory PGlite
 npx tsc -p .       # type check
+npm run admin -- users              # users, keys, records (reads .env)
+npm run admin -- add-user <name>    # a new user and its first write key, printed once
 NEXUS_KEY=… NEXUS_READ_KEY=… NEXUS_DATABASE_URL=postgres://nexus:…@127.0.0.1:5432/nexus npm start
 ```
 
 | Env | Default | Notes |
 |---|---|---|
-| `NEXUS_KEY` | required | Bearer for every route |
-| `NEXUS_READ_KEY` | empty | Bearer for `/export/*` only |
+| `NEXUS_KEY` | required | The owner's bearer for every route |
+| `NEXUS_READ_KEY` | empty | The owner's bearer for `/export/*` only |
 | `NEXUS_DATABASE_URL` | required | Postgres; the schema is created on start |
 | `NEXUS_HOST` / `NEXUS_PORT` | `127.0.0.1` / `33033` | Put TLS in front |
 

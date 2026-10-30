@@ -1,23 +1,21 @@
-import { createHash, timingSafeEqual } from 'node:crypto'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
-import { EXPORT_KINDS, MAX_PUSH_BYTES, MAX_PUSH_ITEMS, isKind, migrate, openStore, type Db } from './store.ts'
+import { EXPORT_KINDS, MAX_PUSH_BYTES, MAX_PUSH_ITEMS, authenticate, isKind, migrate, openStore, syncEnvKeys, type Db } from './store.ts'
 
 const MAX_DEVICE_LENGTH = 80
 
 export interface ServerOptions {
-  /** Bearer for every route: push, pull, status, and export. */
+  /** The owner's bearer for every route: push, pull, status, and export. Other users' keys live in the keys table. */
   key: string
-  /** Bearer for /export only. Empty leaves export to the write key. */
+  /** The owner's bearer for /export only. Empty leaves export to the write key. */
   readKey?: string
   host: string
   port: number
   db: Db
 }
 
-type Access = 'write' | 'read'
-
 export async function startServer(options: ServerOptions) {
   await migrate(options.db)
+  await syncEnvKeys(options.db, { write: options.key, read: options.readKey })
   const store = openStore(options.db)
 
   const server = createServer((req, res) => {
@@ -38,20 +36,14 @@ export async function startServer(options: ServerOptions) {
   const address = server.address()
   const port = typeof address === 'object' && address ? address.port : options.port
 
-  function access(req: IncomingMessage): Access | null {
-    const got = bearer(req)
-    if (tokenOk(got, options.key)) return 'write'
-    if (options.readKey && tokenOk(got, options.readKey)) return 'read'
-    return null
-  }
-
   async function onRequest(req: IncomingMessage, res: ServerResponse) {
     const url = new URL(req.url || '/', 'http://127.0.0.1')
     const route = `${req.method} ${url.pathname}`
     if (route === 'GET /health') return sendJson(res, 200, { ok: true })
 
-    const level = access(req)
-    if (!level) return fail(res, 401, 'unauthorized', 'unauthorized')
+    const auth = await authenticate(options.db, bearer(req))
+    if (!auth) return fail(res, 401, 'unauthorized', 'unauthorized')
+    const { user, access } = auth
 
     if (route === 'GET /export/kinds') {
       return sendJson(res, 200, { app: 'nexus', kinds: Object.entries(EXPORT_KINDS).map(([kind, description]) => ({ kind, description })) })
@@ -61,11 +53,11 @@ export async function startServer(options: ServerOptions) {
       const since = cursorParam(url)
       if (since === null) return fail(res, 400, 'invalid_params', 'since must be a cursor from a previous response')
       const limit = Math.min(Math.max(Number(url.searchParams.get('limit') || 100) || 100, 1), 500)
-      return sendJson(res, 200, await store.exportChanges(since, kindsParam(url), limit))
+      return sendJson(res, 200, await store.exportChanges(user, since, kindsParam(url), limit))
     }
 
     if (!url.pathname.startsWith('/api/sync/')) return fail(res, 404, 'not_found', url.pathname)
-    if (level !== 'write') return fail(res, 403, 'forbidden', 'sync needs the write key')
+    if (access !== 'write') return fail(res, 403, 'forbidden', 'sync needs the write key')
 
     if (route === 'POST /api/sync/push') {
       const body = await readJson(req)
@@ -77,10 +69,10 @@ export async function startServer(options: ServerOptions) {
       }
       if (!Array.isArray(items)) return fail(res, 400, 'invalid_params', 'items must be an array')
       if (items.length > MAX_PUSH_ITEMS) return fail(res, 413, 'too_many_items', `at most ${MAX_PUSH_ITEMS} items per push`)
-      const results = await store.push(device, items)
+      const results = await store.push(user, device, items)
       const written = results.filter(r => r.rev !== undefined).length
       const stale = results.filter(r => r.stale).length
-      console.log(`[nexus-server] push device=${device} items=${items.length} written=${written} stale=${stale} errors=${items.length - written - stale}`)
+      console.log(`[nexus-server] push user=${user} device=${device} items=${items.length} written=${written} stale=${stale} errors=${items.length - written - stale}`)
       return sendJson(res, 200, { results })
     }
 
@@ -90,10 +82,10 @@ export async function startServer(options: ServerOptions) {
       const kinds = kindsParam(url)
       const unknown = kinds.find(kind => !isKind(kind))
       if (unknown) return fail(res, 400, 'unknown_kind', unknown)
-      return sendJson(res, 200, await store.pull(since, kinds.length ? kinds : undefined))
+      return sendJson(res, 200, await store.pull(user, since, kinds.length ? kinds : undefined))
     }
 
-    if (route === 'GET /api/sync/status') return sendJson(res, 200, await store.status())
+    if (route === 'GET /api/sync/status') return sendJson(res, 200, await store.status(user))
 
     return fail(res, 404, 'not_found', url.pathname)
   }
@@ -121,13 +113,6 @@ function kindsParam(url: URL): string[] {
 function bearer(req: IncomingMessage): string {
   const match = /^Bearer\s+(.+)$/i.exec(req.headers.authorization || '')
   return match?.[1] ?? ''
-}
-
-function tokenOk(got: string, expected: string): boolean {
-  if (!got || !expected) return false
-  const a = createHash('sha256').update(got).digest()
-  const b = createHash('sha256').update(expected).digest()
-  return timingSafeEqual(a, b)
 }
 
 function sendJson(res: ServerResponse, status: number, body: unknown) {

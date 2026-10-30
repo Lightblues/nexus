@@ -494,6 +494,28 @@ iris D008.
   --log-failed`), a few minutes per round; UI behavior is still judged on a Mac
   running the beta.
 
+## SADR-019: Users on the server, with the key as the identity
+**Status**: Accepted (2026-10-30)
+
+**Context**: The server held one key and one set of records. If nexus is opened
+to other people, every record needs an owner, and adding that later means
+migrating a table that only grows.
+
+**Decision**: The server has `users` and `keys`; every record has a `user_id`,
+and every route is scoped to the user of the key it was called with. A key is
+stored as its sha256, as write or read. The user `owner` holds `NEXUS_KEY` and
+`NEXUS_READ_KEY` (re-registered from the environment on every start) and every
+record from before. Other users and keys come from `npm run admin`. No sign-up,
+login, sessions, or per-device keys yet; the Mac app and sonar are unchanged.
+
+**Consequences**:
+- The rev sequence stays global (one write lock), so a user's revs have gaps.
+- The web app's `/login` (roadmap round 3) signs in with a key and finds the
+  user from it; accounts with passwords or OAuth come only when someone else
+  uses nexus.
+- Window titles and URLs keep syncing as they are: each user's data is behind
+  their own key (roadmap open question 2, decided the same day).
+
 ---
 
 ## Inherited / mapped from Electron ADRs
