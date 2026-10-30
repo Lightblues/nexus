@@ -75,3 +75,28 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         COMBINE_HIDPI_IMAGES: YES
         ENABLE_PREVIEWS: YES
+  # Hosted in Nexus.app, which starts no services under XCTest (NexusMain.isHostingTests).
+  NexusTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: NexusTests
+    dependencies:
+      - target: Nexus
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: site.easonsi.nexus.tests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  Nexus:
+    build:
+      targets:
+        Nexus: all
+        NexusTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets: [NexusTests]
+    archive:
+      config: Release

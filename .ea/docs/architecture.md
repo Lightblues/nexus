@@ -98,6 +98,8 @@ Nexus.xcodeproj
 ## App Lifecycle
 
 ```
+NexusMain.main()                          # under XCTest: bare NSApplication, nothing below
+  ↓
 NSApp launch
   ↓
 AppDelegate.applicationDidFinishLaunching
@@ -268,14 +270,19 @@ update.
   Accessibility grant across upgrades; local builds are ad-hoc (`-`). No Apple Developer
   ID. `build-mac.sh` fails on a broken signature (`codesign --verify --strict --deep`) or
   a missing architecture.
-- CI (`.github/workflows/build.yml`): every push to `main` and pull request builds,
-  launches the app, and mounts the DMG; a push to `main` also replaces the `nexus-beta`
+- CI (`.github/workflows/build.yml`): every push to `main` and pull request runs the
+  unit tests (`ci-checks.sh unit`), builds, launches the app, and mounts the DMG; a push to `main` also replaces the `nexus-beta`
   pre-release and the `nexus@beta` cask; a `nexus-v*` tag publishes the release and the
   `nexus` cask. On a Mac, `scripts/beta.sh install` follows the beta.
 - Quarantine: Homebrew cask `postflight` continues to strip `com.apple.quarantine`.
 - Universal binary: `ARCHS = arm64 x86_64`, single DMG drops the per-arch split. Cask
   simplifies (no `arch` block).
 - See `migration.md` for the rollout plan.
+- Tests: `NexusTests` (XCTest, `project.yml`) is hosted in Nexus.app, whose
+  `NexusMain` starts no services under XCTest, so the suite never opens the user's
+  database. It covers pure logic: the tracker merge key, the compressor's `.auto` pick,
+  palette scoring, config decoding, and `nexus://` parsing.
+  `xcodebuild test -scheme Nexus -destination 'platform=macOS'`.
 
 ## What Maps from the Electron Spec
 

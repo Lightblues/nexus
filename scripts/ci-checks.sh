@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# ci-checks.sh — Checks on what build-mac.sh produced. Run on a Mac (CI or local).
+# ci-checks.sh — Unit tests, and checks on what build-mac.sh produced. Run on a Mac (CI or local).
 #
+#   ./scripts/ci-checks.sh unit     # xcodebuild test (NexusTests); assert the suite left no app data behind (nexus-013)
 #   ./scripts/ci-checks.sh launch   # start build/export/Nexus.app, assert alive + launch banner (nexus-003)
 #   ./scripts/ci-checks.sh dmg      # mount dist/Nexus-*.dmg, assert the drag-install layout (nexus-012)
 
@@ -8,6 +9,23 @@ set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMP="${RUNNER_TEMP:-/tmp}"
+
+unit() {
+  local data="$HOME/Library/Application Support/site.easonsi.nexus" log="$TMP/nexus-unit.log"
+  local had_data=0
+  [[ -e "$data" ]] && had_data=1
+  (cd "$PROJECT_DIR" && xcodegen generate >/dev/null)
+  if ! xcodebuild -project "$PROJECT_DIR/Nexus.xcodeproj" -scheme Nexus -destination 'platform=macOS' \
+    CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO test >"$log" 2>&1; then
+    grep -E "error:|failed|Failing tests" "$log" || tail -50 "$log"
+    echo "Unit tests failed (full log: $log)"; exit 1
+  fi
+  grep -E "Executed [0-9]+ tests?" "$log" | tail -1
+  if [[ $had_data == 0 && -e "$data" ]]; then
+    echo "The test run created $data:"; ls -la "$data"; exit 1
+  fi
+  echo "Unit tests passed"
+}
 
 launch() {
   local app="$PROJECT_DIR/build/export/Nexus.app" log="$HOME/Library/Logs/site.easonsi.nexus/main.log"
@@ -64,7 +82,8 @@ for e in plistlib.loads(sys.stdin.buffer.read()).get("system-entities", []):
 }
 
 case "${1:-}" in
+  unit) unit ;;
   launch) launch ;;
   dmg) dmg ;;
-  *) echo "usage: $0 launch|dmg"; exit 2 ;;
+  *) echo "usage: $0 unit|launch|dmg"; exit 2 ;;
 esac

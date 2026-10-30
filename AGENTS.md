@@ -10,6 +10,7 @@ archived at the `legacy/electron` git tag.
 - **Where**: code is written on devcloud (`/data/projects/app/nexus`); the app builds only on macOS, so every push to `main` is built, launched and DMG-checked by CI on `macos-15` (`gh run watch`, `gh run view --log-failed`) and published as the `nexus@beta` cask, which Macs on `scripts/beta.sh install` pick up within 10 min. SADR-018.
 - **Dev on a Mac**: `xcodegen generate && open Nexus.xcodeproj` → ⌘R
 - **Build DMG**: `./scripts/build-mac.sh` → `dist/Nexus-<version>.dmg`
+- **Test**: `./scripts/ci-checks.sh unit` on a Mac (CI runs it on every push); `services/server`: `npm test`; `Packages/NexusSync`: see `.ea/docs/sync.md`
 - **Local install**: `./scripts/install-local.sh` (build + replace `/Applications/Nexus.app`)
 - **Release**: bump `CFBundleShortVersionString` in `project.yml`, tag `nexus-vX.Y.Z`, push → CI builds DMG, creates GitHub Release, bumps Homebrew cask
 - **Bundle ID**: `site.easonsi.nexus` (frozen — Mackup + AX permission continuity)

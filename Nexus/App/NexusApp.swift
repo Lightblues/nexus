@@ -2,6 +2,18 @@ import SwiftUI
 import AppKit
 
 @main
+enum NexusMain {
+    /// Under XCTest the app only hosts `NexusTests`: no services, no database, no status item.
+    static var isHostingTests: Bool {
+        let env = ProcessInfo.processInfo.environment
+        return env["XCTestConfigurationFilePath"] != nil || env["XCTestBundlePath"] != nil || NSClassFromString("XCTestCase") != nil
+    }
+
+    static func main() {
+        if isHostingTests { NSApplication.shared.run() } else { NexusApp.main() }
+    }
+}
+
 struct NexusApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 

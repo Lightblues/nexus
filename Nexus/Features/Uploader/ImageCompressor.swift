@@ -87,40 +87,34 @@ enum ImageCompressor {
 
     // MARK: - Strategies
 
+    enum AutoPick: Equatable { case original, webp, png, jpeg }
+
+    /// What `.auto` keeps, from the sizes of the encodings tried. `webpSize` is nil when
+    /// WebP is unsupported or failed. GIF keeps the original; alpha keeps WebP only when
+    /// smaller than the original, else PNG; no alpha keeps the smaller of JPEG and WebP.
+    static func autoPick(isGIF: Bool, hasAlpha: Bool, originalSize: Int, webpSize: Int?, jpegSize: Int) -> AutoPick {
+        if isGIF { return .original }
+        if hasAlpha { return webpSize.map { $0 < originalSize } == true ? .webp : .png }
+        guard let webpSize else { return .jpeg }
+        return jpegSize <= webpSize ? .jpeg : .webp
+    }
+
     private static func autoStrategy(data: Data, meta: ImageMeta, quality: Double, originalSize: Int) throws -> CompressResult {
-        // GIF: preserve.
         if meta.format == .gif {
             Log.uploader.info("GIF detected, preserving original")
             return CompressResult(data: data, originalSize: originalSize, compressedSize: data.count,
                                   width: meta.width, height: meta.height, outputFormat: .gif)
         }
-        if meta.hasAlpha {
-            // Alpha → WebP first, fall back to PNG if WebP is bigger or unsupported.
-            if webpEncodeSupported,
-               let webp = try? encodeWebP(data: data, meta: meta, quality: quality, originalSize: originalSize),
-               webp.compressedSize < originalSize {
-                Log.uploader.info("alpha + WebP wins (\(webp.compressedSize) < \(originalSize))")
-                return webp
-            }
-            Log.uploader.info("alpha → PNG path (WebP unsupported or larger)")
-            return try encodePNG(data: data, meta: meta, originalSize: originalSize)
+        let webp = webpEncodeSupported ? try? encodeWebP(data: data, meta: meta, quality: quality, originalSize: originalSize) : nil
+        let jpeg = meta.hasAlpha ? nil : try encodeJPEG(data: data, meta: meta, quality: quality, originalSize: originalSize)
+        let pick = autoPick(isGIF: false, hasAlpha: meta.hasAlpha, originalSize: originalSize,
+                            webpSize: webp?.compressedSize, jpegSize: jpeg?.compressedSize ?? 0)
+        Log.uploader.info("auto: alpha=\(meta.hasAlpha) original=\(originalSize) webp=\(webp.map { String($0.compressedSize) } ?? "none") jpeg=\(jpeg.map { String($0.compressedSize) } ?? "-") → \(pick)")
+        switch pick {
+        case .webp: return webp!
+        case .jpeg: return jpeg!
+        case .png, .original: return try encodePNG(data: data, meta: meta, originalSize: originalSize)
         }
-        // No alpha → JPEG vs WebP, pick smaller.
-        let jpeg = try encodeJPEG(data: data, meta: meta, quality: quality, originalSize: originalSize)
-        if !webpEncodeSupported {
-            Log.uploader.info("no-alpha JPEG (WebP encode unsupported)")
-            return jpeg
-        }
-        guard let webp = try? encodeWebP(data: data, meta: meta, quality: quality, originalSize: originalSize) else {
-            Log.uploader.info("no-alpha JPEG (WebP encode failed)")
-            return jpeg
-        }
-        if jpeg.compressedSize <= webp.compressedSize {
-            Log.uploader.info("no-alpha JPEG wins (\(jpeg.compressedSize) ≤ \(webp.compressedSize))")
-            return jpeg
-        }
-        Log.uploader.info("no-alpha WebP wins (\(webp.compressedSize) < \(jpeg.compressedSize))")
-        return webp
     }
 
     // MARK: - Single-format encoders
