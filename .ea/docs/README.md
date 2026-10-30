@@ -1,4 +1,4 @@
-# Nexus Spec
+# Nexus docs
 
 Native macOS menu bar toolkit — Pomodoro timer, time tracker, image uploader,
 command palette. Single AppKit + SwiftUI binary (post-v1.0.0 Swift rewrite of
@@ -23,6 +23,8 @@ docs are kept under [`legacy-electron/`](legacy-electron/) for ADR cross-referen
 
 ## Module Index
 
+What comes next: [../roadmap.md](../roadmap.md). Discussions and incidents: [../log/](../log/).
+
 | File | Content |
 |------|---------|
 | [architecture.md](architecture.md) | App lifecycle, target layout, persistence, in-process services |
@@ -31,7 +33,7 @@ docs are kept under [`legacy-electron/`](legacy-electron/) for ADR cross-referen
 | [uploader.md](uploader.md) | ImageIO compression, GitHub REST upload, drop targets |
 | [palette.md](palette.md) | NSPanel palette, global hotkey, `nexus://` scheme, CommandRegistry |
 | [sync.md](sync.md) | Multi-Mac sync: record kinds, the `services/server` HTTP contract, merge and first-contact rules, export, deploy |
-| [decisions.md](decisions.md) | Swift ADRs (SADR-001 .. SADR-017). Cross-references `legacy-electron/decisions.md` for the original ADR-NNN entries |
+| [../log/decisions.md](../log/decisions.md) | Swift ADRs (SADR-001 .. SADR-018), append-only. Cross-references `legacy-electron/decisions.md` for the original ADR-NNN entries |
 | [migration.md](migration.md) | Electron→Swift data compatibility, rollout strategy |
 | [pitfalls.md](pitfalls.md) | Postmortem of traps hit during the migration. Read before adopting any of these patterns in a new project |
 | [legacy-electron/](legacy-electron/) | Two preserved Electron-era spec files (architecture.md, decisions.md). Kept solely so SADR entries that say "see ADR-009" still resolve in working tree. Full Electron sources/spec at `legacy/electron` git tag |

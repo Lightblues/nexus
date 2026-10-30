@@ -4,7 +4,7 @@ Postmortem from the Electron → Swift migration. Each entry captures the **symp
 **root cause**, and **fix that landed**, so the next macOS app project can copy the
 fix instead of rediscovering the trap.
 
-Companion to `decisions.md` (which records *what* we chose). This file records
+Companion to `../log/decisions.md` (which records *what* we chose). This file records
 *what bit us when we chose it*.
 
 ---

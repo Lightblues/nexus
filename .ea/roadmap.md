@@ -1,6 +1,6 @@
 # Roadmap
 
-nexus is the Mac-side assistant of the ea system: it senses what the user does on the Mac, acts on the Mac for him, and is the way outside agents (baton's steward, intake, Paseo agents) reach the Mac, as iris is for the browser. Proposal and reasoning: [log/2026-10-30-positioning.md](log/2026-10-30-positioning.md) (proposed). What the code does now: [docs/spec.md](docs/spec.md).
+nexus is the Mac-side assistant of the ea system: it senses what the user does on the Mac, acts on the Mac for him, and is the way outside agents (baton's steward, intake, Paseo agents) reach the Mac, as iris is for the browser. Proposal and reasoning: [log/2026-10-30-positioning.md](log/2026-10-30-positioning.md) (proposed). What the code does now: [docs/README.md](docs/README.md).
 
 Status: draft, 2026-10-30, waiting for the user's review. Rounds are in order; each is released when done (versioning is open question 5).
 
@@ -15,7 +15,7 @@ What later rounds stand on. No new features.
 
 1. ~~**Development on devcloud, builds on CI, rolling beta.**~~ Done 2026-10-30 (SADR-018): every push to `main` is built, launched, and DMG-checked on `macos-15`, signed with a stable self-signed identity, and published as the `nexus@beta` cask; `scripts/beta.sh install` keeps a Mac on it (xh-mini-m1 is the test Mac). nexus-003, 010, 011, 012 done.
 2. **Permissions survive upgrades.** The stable identity is in place; the Accessibility prompt on first start (nexus-002). Each Mac grants once more when it moves to a signed build, then keeps the grant.
-3. **Docs layout.** `AGENTS.md` (with `CLAUDE.md` a symlink), `docs/README.md` as the index (from `spec.md`), decisions to `log/decisions.md` with the SADR numbers kept, every `docs/` page checked against the code (`tracker.md` still describes the Electron JSON store).
+3. **Docs layout.** ~~`AGENTS.md` (with `CLAUDE.md` a symlink), `docs/README.md` as the index (from `spec.md`), decisions to `log/decisions.md` with the SADR numbers kept~~ (done 2026-10-30). Still: every `docs/` page checked against the code (`tracker.md` still describes the Electron JSON store; `.ea/report/` folded into `log/`).
 4. **Tests.** A unit test target run by CI (nexus-013).
 5. **Open fixes.** Triage nexus-004 to 009, 014, 015: fix, fold into round 2, or close. Fresh-Mac first contact: seeded default projects and tags lose to the server's copies. The casks' `postflight` is deprecated in Homebrew 7 (warning on install).
 

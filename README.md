@@ -3,7 +3,7 @@
 Native macOS menu bar toolkit — Pomodoro timer, time tracker, image uploader,
 command palette. Single-binary AppKit + SwiftUI app, self-signed (no Apple Developer ID).
 
-See [`.ea/docs/`](.ea/docs/spec.md) for the full architecture and decision
+See [`.ea/docs/`](.ea/docs/README.md) for the full architecture and decision
 log. The Electron-based predecessor is preserved at the `legacy/electron` git
 tag.
 

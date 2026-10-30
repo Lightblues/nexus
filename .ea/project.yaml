@@ -6,5 +6,5 @@ status: active
 priority: p1
 thread: app
 depends_on: []
-stack: [typescript, electron, react]
+stack: [swift, appkit, swiftui, typescript]
 description: macOS menu bar toolkit — Pomodoro timer, image uploader, time tracker

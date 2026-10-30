@@ -399,7 +399,7 @@ export feed that intake reads.
 pull with a cursor, and `/export/*` for other apps. Each row is one record;
 the newer `updatedAt` wins, ties keep the stored copy, and a losing write gets
 the stored record back. Deletes are tombstones. Settings sync whole, one record
-per key, including the uploader's GitHub token. Contract: [`sync.md`](sync.md).
+per key, including the uploader's GitHub token. Contract: [`sync.md`](../docs/sync.md).
 
 **Rejected alternatives**:
 - iris's WebSocket hub and base-rev merge — Nexus has no relay calls, and none of
@@ -431,7 +431,7 @@ SQLite lacks `sqlite3_snapshot_*`); GRDB 7 does.
 sync logic in `Packages/NexusSync`, a SwiftPM package with GRDB as its only
 dependency and no AppKit/SwiftUI, tested with `swift test` in `swift:6.1-noble`.
 Change capture is SQLite triggers into `sync_outbox`, so the app's repositories
-stay unchanged. Layout and wiring: [`sync.md`](sync.md#swift-client).
+stay unchanged. Layout and wiring: [`sync.md`](../docs/sync.md#swift-client).
 
 **Rejected alternatives**:
 - Recording changes in each repository method — touches every write path and
@@ -499,7 +499,7 @@ iris D008.
 ## Inherited / mapped from Electron ADRs
 
 The Electron-era ADR full text lives at
-[`legacy-electron/decisions.md`](legacy-electron/decisions.md). The table below
+[`legacy-electron/decisions.md`](../docs/legacy-electron/decisions.md). The table below
 maps each one to its Swift fate.
 
 | Electron ADR | Status in Swift | Swift counterpart |
@@ -522,7 +522,7 @@ maps each one to its Swift fate.
 
 ## See also
 
-[`pitfalls.md`](pitfalls.md) — postmortem of traps the *implementations* of these
+[`pitfalls.md`](../docs/pitfalls.md) — postmortem of traps the *implementations* of these
 decisions hit. Each pitfall entry is keyed to the decision (or omission) that
 caused it; if you adopt one of these SADRs in a new project, read the
 corresponding pitfall first.
