@@ -9,6 +9,8 @@ import Combine
 final class UploaderService: ObservableObject {
     /// Read-only signal: nil means "no GitHub credentials configured".
     @Published private(set) var isConfigured: Bool = false
+    /// `uploader.enabled`: off hides the sidebar route and makes the commands and the status-item drop inert.
+    @Published private(set) var isEnabled: Bool = true
     /// Set by the menu bar drag receiver; consumed by the next mount of
     /// UploaderPopoverView. Reset to nil after consumption. Always 1+
     /// elements when non-nil (UploaderView treats them as a batch).
@@ -143,6 +145,11 @@ final class UploaderService: ObservableObject {
     // MARK: - Private
 
     private func applyConfig(_ cfg: UploaderConfig) async {
+        if cfg.enabled != isEnabled {
+            isEnabled = cfg.enabled
+            if !cfg.enabled { pendingImages = nil }
+            Log.uploader.info(cfg.enabled ? "enabled" : "disabled")
+        }
         await github.configure(cfg.github)
         let configured = !cfg.github.token.isEmpty
             && !cfg.github.owner.isEmpty

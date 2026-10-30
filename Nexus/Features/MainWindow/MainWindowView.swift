@@ -8,6 +8,7 @@ import SwiftUI
 /// flips this state, and ⌃⌘S works as a keyboard shortcut.
 struct MainWindowView: View {
     @EnvironmentObject var routeRequest: RouteRequest
+    @EnvironmentObject var uploader: UploaderService
     @State private var route: MainRoute = .stats
     @State private var sidebarVisibility: NavigationSplitViewVisibility = .all
 
@@ -18,8 +19,10 @@ struct MainWindowView: View {
                     sidebarItem(.stats)
                     sidebarItem(.tracker)
                 }
-                Section("Tools") {
-                    sidebarItem(.uploader)
+                if uploader.isEnabled {
+                    Section("Tools") {
+                        sidebarItem(.uploader)
+                    }
                 }
                 Section("Configuration") {
                     sidebarItem(.settings)
@@ -41,6 +44,9 @@ struct MainWindowView: View {
         }
         .navigationTitle(route.label)
         .frame(minWidth: 700, minHeight: 400)
+        .onReceive(uploader.$isEnabled) { enabled in
+            if !enabled && route == .uploader { route = .stats }
+        }
         .onReceive(routeRequest.$requested) { req in
             if let req {
                 route = req

@@ -12,11 +12,16 @@ enum UploaderCommands {
             title: "Uploader: Open",
             group: g,
             keywords: ["upload", "image", "github", "cdn"],
+            when: { [weak service] in service?.isEnabled ?? false },
             subtitle: { [weak service] in
                 guard let service else { return nil }
                 return service.isConfigured ? "ready" : "not configured — set GitHub token in Settings"
             },
-            run: { [weak mainWindow] in
+            run: { [weak service, weak mainWindow] in
+                guard service?.isEnabled == true else {
+                    Log.uploader.warn("uploader.open: uploader is disabled")
+                    return
+                }
                 mainWindow?.show(route: .uploader)
             }
         ))
@@ -28,7 +33,7 @@ enum UploaderCommands {
             keywords: ["paste", "screenshot", "clipboard"],
             when: { [weak service] in
                 guard let service else { return false }
-                return service.isConfigured && service.clipboardImage() != nil
+                return service.isEnabled && service.isConfigured && service.clipboardImage() != nil
             },
             subtitle: { [weak service] in
                 guard let service else { return nil }
@@ -37,6 +42,10 @@ enum UploaderCommands {
             },
             run: { [weak service, weak mainWindow] in
                 guard let service else { return }
+                guard service.isEnabled else {
+                    Log.uploader.warn("uploadClipboard: uploader is disabled")
+                    return
+                }
                 guard let data = service.clipboardImage() else {
                     Log.uploader.warn("uploadClipboard: no image in pasteboard")
                     return

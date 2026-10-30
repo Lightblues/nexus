@@ -24,6 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         installStatusItem()
         installPopover()
+        environment.pomodoro.showPopover = { [weak self] in self?.showPopover() }
         environment.pomodoro.attach(statusItem: statusItem!)
         Log.app.info("Nexus (Swift) launched, pid=\(ProcessInfo.processInfo.processIdentifier)")
     }
@@ -77,6 +78,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// (which we open immediately afterwards) picks them up as a batch.
     private func handleStatusItemDrop(payloads: [(Data, String)]) {
         guard !payloads.isEmpty else { return }
+        guard environment.uploader.isEnabled else {
+            Log.uploader.info("drop on icon ignored: uploader is disabled")
+            return
+        }
         Log.uploader.info("dropped on icon: \(payloads.count) image\(payloads.count == 1 ? "" : "s")")
         let pendings = payloads.map { PendingImage(data: $0.0, filename: $0.1) }
         environment.uploader.setPending(pendings)
@@ -138,21 +143,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func togglePopover() {
-        guard let pop = popover, let button = statusItem?.button else { return }
-        if pop.isShown {
-            closePopover()
-        } else {
-            pop.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-            // Intentionally do NOT call `NSApp.activate(ignoringOtherApps: true)` here.
-            // The popover is a status-bar attachment and should behave like a system
-            // menubar item: appear without stealing focus from the user's current app
-            // (e.g. VSCode) and without dragging Nexus's MainWindow z-order to the
-            // front. SwiftUI buttons inside the popover work fine without app
-            // activation. The only place we *do* need activation is when the user
-            // opens the EditSessionModal sheet (TextFields need key focus); that
-            // call lives in PomodoroPopoverView's edit button action.
-            installClickOutsideMonitor()
-        }
+        if popover?.isShown == true { closePopover() } else { showPopover() }
+    }
+
+    private func showPopover() {
+        guard let pop = popover, !pop.isShown, let button = statusItem?.button else { return }
+        pop.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        // Intentionally do NOT call `NSApp.activate(ignoringOtherApps: true)` here.
+        // The popover is a status-bar attachment and should behave like a system
+        // menubar item: appear without stealing focus from the user's current app
+        // (e.g. VSCode) and without dragging Nexus's MainWindow z-order to the
+        // front. SwiftUI buttons inside the popover work fine without app
+        // activation. The only place we *do* need activation is when the user
+        // opens the EditSessionModal sheet (TextFields need key focus); that
+        // call lives in PomodoroPopoverView's edit button action.
+        installClickOutsideMonitor()
     }
 
     private func closePopover() {

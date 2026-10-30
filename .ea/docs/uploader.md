@@ -163,12 +163,17 @@ https://cdn.jsdelivr.net/gh/{owner}/{repo}@{branch}/{path}/{filename}
 
 | ID | Action |
 |---|---|
-| `uploader.openPopover` | Show popover in uploader view |
-| `uploader.uploadClipboard` | Read clipboard image, upload with default config |
+| `uploader.open` | Open the main window on the uploader |
+| `uploader.uploadClipboard` | Stage the clipboard image and open the uploader to confirm it (offered only when configured and the clipboard holds an image) |
 
 ## Config
 
 `uploader.enabled`, `uploader.github.{token, owner, repo, branch}`, `uploader.cdn.baseUrl`,
 `uploader.compress.{quality, defaultFormat}`, `uploader.defaultPath`,
-`uploader.cacheThumbnails`. The token is a setting like the others and syncs across the
+`uploader.cacheThumbnails`.
+
+`uploader.enabled = false` turns the feature off live (`UploaderService.isEnabled`): the
+sidebar drops the Image Uploader item (an open uploader page goes back to Stats), the
+palette stops offering both commands and `nexus://` runs of them do nothing, and a drop on
+the status item is ignored. Settings → Uploader stays, to turn it back on. The token is a setting like the others and syncs across the
 user's Macs (personal use); it never leaves the sync path (not exported).

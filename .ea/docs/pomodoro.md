@@ -168,3 +168,7 @@ Electron build does — open `raycast://confetti`.
 `pomodoro.*` in `AppConfig` (stored in nexus.db, `architecture.md`). Services subscribe to
 `ConfigService.$config`, so a change from Settings, sync, or `nexus config set` applies
 live.
+
+When a focus session runs to zero: `confettiOnComplete` opens Raycast's confetti without
+activating Raycast, and `showPopoverOnComplete` shows the status-item popover, which does
+not activate Nexus either. Neither applies to breaks.
