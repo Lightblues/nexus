@@ -28,6 +28,12 @@ final class PaletteController: ObservableObject {
     }
 
     func show() {
+        // The hotkey can fire before AppEnvironment.bootstrap() attaches us; makePanel() needs the environment.
+        guard environment != nil else {
+            Log.palette.warn("PaletteController.show() before attach; retrying next tick")
+            DispatchQueue.main.async { [weak self] in self?.show() }
+            return
+        }
         if panel == nil { panel = makePanel() }
         guard let panel else { return }
         positionOnActiveScreen(panel)
