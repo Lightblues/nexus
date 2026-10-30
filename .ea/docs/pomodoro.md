@@ -33,7 +33,7 @@ final class PomodoroService {
 
     private var tickTimer: Timer?
     private var autoBreakTask: Task<Void, Never>?
-    private let store: PomodoroStore
+    private let repository: PomodoroRepository
     private let config: ConfigService
     private let notifier: NotificationService
     private let tray: StatusItemController
@@ -66,49 +66,14 @@ tray.button?.title = " \(formatMMSS(remaining))"
 No SwiftUI re-render is triggered for the tray title — it's an AppKit property.
 The popover view binds to `@Observable remaining` and re-renders only while open.
 
-## Data Layer (`PomodoroStore.swift`)
+## Data Layer (`PomodoroRepository.swift`)
 
-JSON file at `~/.ea/nexus/data.json`, schema-compatible with Electron (electron-store
-just nests user data under a top-level `__internal__`-style key — see migration.md).
-
-```swift
-struct PomodoroData: Codable {
-    var sessions: [SessionRecord]
-    var meta: PomodoroMeta
-}
-
-struct SessionRecord: Codable, Identifiable {
-    let id: UUID                  // matches Electron uuid v4 strings
-    let kind: SessionKind         // "work" | "shortBreak" | "longBreak"
-    let startTime: Date           // ISO 8601
-    let endTime: Date
-    let duration: TimeInterval    // seconds
-    var project: String?
-    var tags: [String]
-    var task: String?
-    var completedFully: Bool      // true if reached 0; false if finished early
-}
-
-struct PomodoroMeta: Codable {
-    var projects: [Project]
-    var tags: [String]
-    var lastSession: SessionMetadata
-}
-```
-
-### Archive sweep (port of ADR-004)
-
-At launch:
-1. Load `data.json`.
-2. Cutoff = `now - 90 days`.
-3. Move sessions older than cutoff into `archive/pomodoro-{YYYY}.json`, deduped by ID.
-4. Rewrite `data.json` with the trimmed array.
-
-`getAllSessions()` for the activity calendar reads `data.json` + every relevant
-`archive/pomodoro-*.json`, merges by ID, returns sorted by `startTime`.
-
-Cache hot for the ActivityCalendar view: load all archives once into a `@Observable`
-`SessionHistoryService` and invalidate on new session insertion.
+SQLite tables in nexus.db: `pomodoro_sessions` (id, kind, start and end time in unix
+seconds, duration, project, task, completed_fully), `pomodoro_session_tags`,
+`pomodoro_projects` (name, color, created_at), and `pomodoro_tag_catalog`. All of them sync
+(`sync.md`). There is no archive sweep: the database keeps every session, and the stats
+views query by date range. A new Mac starts with empty catalogs and gets the projects and
+tags from the server on its first sync.
 
 ## Popover UI (`Views/PomodoroPopoverView.swift`)
 
@@ -200,6 +165,6 @@ Electron build does — open `raycast://confetti`.
 
 ## Config
 
-Schema in `ConfigSchema.swift` under the `pomodoro.*` block. The `Config.swift`
-watcher fires `Config.publisher` → service rebinds durations live. No app
-restart for config changes.
+`pomodoro.*` in `AppConfig` (stored in nexus.db, `architecture.md`). Services subscribe to
+`ConfigService.$config`, so a change from Settings, sync, or `nexus config set` applies
+live.

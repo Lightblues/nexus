@@ -14,8 +14,8 @@ archived at the `legacy/electron` git tag.
 - **Local install**: `./scripts/install-local.sh` (build + replace `/Applications/Nexus.app`)
 - **Release**: bump `CFBundleShortVersionString` in `project.yml`, tag `nexus-vX.Y.Z`, push → CI builds DMG, creates GitHub Release, bumps Homebrew cask
 - **Bundle ID**: `site.easonsi.nexus` (frozen — Mackup + AX permission continuity)
-- **Data**: `~/Library/Application Support/site.easonsi.nexus/` (config + db); `~/Library/Caches/...` (thumbnails); `~/Library/Logs/...` (main.log). v1.2.0 migration: run `./scripts/migrate-data-v1.2.0.sh` once before first launch on the new layout. See SADR-015.
-- **Docs** (shared `.ea/` layout, forge-run `references/ea-layout.md`): `.ea/docs/README.md` is the index of what the code does now; `.ea/roadmap.md` what comes next; `.ea/log/decisions.md` the SADRs (append-only); `.ea/log/YYYY-MM-DD-*.md` discussions and incidents. `.ea/docs/legacy-electron/` holds two Electron-era files for SADR cross-reference; full Electron sources at the `legacy/electron` git tag. A behavior or contract change updates `.ea/docs/` in the same commit.
+- **Data**: `~/Library/Application Support/site.easonsi.nexus/nexus.db` (records and settings, no config file) and `sync.json`; `~/Library/Caches/...` (thumbnails); `~/Library/Logs/...` (main.log). See SADR-015.
+- **Docs** (shared `.ea/` layout, forge-run `references/ea-layout.md`): `.ea/docs/README.md` is the index of what the code does now; `.ea/roadmap.md` what comes next; `.ea/log/decisions.md` the SADRs (append-only); `.ea/log/YYYY-MM-DD-*.md` discussions and incidents. The Electron app is at the `legacy/electron` git tag. A behavior or contract change updates `.ea/docs/` in the same commit.
 
 ## Coding Style
 - Compact and type-hinted

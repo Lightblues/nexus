@@ -1,7 +1,7 @@
 # Swift-side Architecture Decisions (SADRs)
 
-These ADRs are specific to the Swift rewrite. For each Electron ADR with a direct
-Swift counterpart, the mapping is recorded at the bottom under "Inherited / mapped".
+Decisions since the Swift rewrite, append-only. "ADR-NNN" refers to the Electron app's
+decisions, at the `legacy/electron` git tag (`.ea/spec/decisions.md` there).
 
 ---
 
@@ -515,30 +515,6 @@ login, sessions, or per-device keys yet; the Mac app and sonar are unchanged.
   uses nexus.
 - Window titles and URLs keep syncing as they are: each user's data is behind
   their own key (roadmap open question 2, decided the same day).
-
----
-
-## Inherited / mapped from Electron ADRs
-
-The Electron-era ADR full text lives at
-[`legacy-electron/decisions.md`](../docs/legacy-electron/decisions.md). The table below
-maps each one to its Swift fate.
-
-| Electron ADR | Status in Swift | Swift counterpart |
-|---|---|---|
-| ADR-001 (osascript over get-windows) | **Reverted** | Native AX API now that single-binary lifts the dual-permission constraint (SADR-010) |
-| ADR-002 (Shared types) | **N/A** | One process, no IPC, types live with the service that owns them |
-| ADR-003 (IPC channel constants) | **N/A** | No IPC layer; service method signatures are the contract |
-| ADR-004 (Auto-archiving) | **Preserved** | `PomodoroStore.runArchiveSweep()` at launch, identical 90-day cutoff |
-| ADR-005 (IPC listener cleanup) | **N/A** | `@Observable` handles teardown; no manual listener bookkeeping |
-| ADR-006 (Hash routing) | **Preserved as enum** | `enum MainRoute { case stats, tracker, settings }` |
-| ADR-007 (Unified edit modal) | **Preserved** | Single SwiftUI sheet for idle + running |
-| ADR-008 (pnpm enforcement) | **N/A** | SwiftPM only, no JS toolchain |
-| ADR-009 (CommandRegistry as unified surface) | **Preserved** | `Core/CommandRegistry.swift`, same shape |
-| ADR-010 (Hotkey default `Cmd+Shift+Space`) | **Preserved** | Same default; `HotKey.swift` reads `cfg.hotkey.palette` |
-| ADR-011 (Ad-hoc codesign via electron-builder) | **Replaced** | Single binary; `xcodebuild` ad-hoc signing handles it correctly. The "deep / inside-out" pitfall doesn't apply |
-| ADR-012 (Homebrew tap) | **Preserved** | Same tap, simpler cask (no per-arch block per SADR-012) |
-| ADR-013 (Palette as panel) | **Preserved** | NSPanel `nonactivatingPanel` (SADR-011) |
 
 ---
 

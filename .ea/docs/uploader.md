@@ -88,7 +88,7 @@ enum ImageCompressor {
 The CompressOptions schema is identical to Electron (`quality: 0–100`,
 `format: auto | jpeg | webp | png`).
 
-## GitHub Client (`GitHubClient.swift`)
+## GitHub Client (`GitHubUploader.swift`)
 
 `URLSession.shared` with a JSON encoder. Implements `PUT /repos/{owner}/{repo}/contents/{path}`
 with `Authorization: token {pat}`.
@@ -120,15 +120,13 @@ https://cdn.jsdelivr.net/gh/{owner}/{repo}@{branch}/{path}/{filename}
 
 ## Storage
 
-- `~/.ea/nexus/uploader.json` — array of `UploadRecord` (schema below)
-- `~/.ea/nexus/uploader/cache/{id}.webp` — 200px thumbnail
-  - **Note**: Electron build also uses `.webp`. We keep the same filename pattern so
-    cached thumbnails from the Electron build remain valid for users mid-migration.
+`upload_history` (one row per upload: CDN URL, sha, size, format, the repo it went to) and
+`upload_paths` (recent paths, MRU) in nexus.db; thumbnails in
+`~/Library/Caches/site.easonsi.nexus/uploader-thumbnails/`. Upload history does not sync.
 
 ## Recent paths
 
-`UploaderService.recentPaths` — last 10 distinct paths used, MRU-ordered.
-Persisted in `uploader.json` under `meta.recentPaths` (matches Electron).
+`UploaderService.recentPaths`: the last 10 distinct paths, from `upload_paths`.
 
 ## UI (Popover)
 
@@ -168,24 +166,9 @@ Persisted in `uploader.json` under `meta.recentPaths` (matches Electron).
 | `uploader.openPopover` | Show popover in uploader view |
 | `uploader.uploadClipboard` | Read clipboard image, upload with default config |
 
-## Config (unchanged)
+## Config
 
-```yaml
-uploader:
-  enabled: true
-  github:
-    token: "ghp_xxxx"
-    owner: "lightblues"
-    repo: "assets"
-    branch: "main"
-  cdn:
-    baseUrl: "https://cdn.jsdelivr.net/gh"
-  compress:
-    quality: 80
-    defaultFormat: "auto"
-  defaultPath: "upload"
-  cacheThumbnails: true
-```
-
-Token storage: keep in `config.yaml` (parity with Electron). Future improvement:
-move to Keychain as an opt-in (`security` framework) — out of scope for v1.
+`uploader.enabled`, `uploader.github.{token, owner, repo, branch}`, `uploader.cdn.baseUrl`,
+`uploader.compress.{quality, defaultFormat}`, `uploader.defaultPath`,
+`uploader.cacheThumbnails`. The token is a setting like the others and syncs across the
+user's Macs (personal use); it never leaves the sync path (not exported).

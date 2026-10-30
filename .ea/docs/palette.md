@@ -62,7 +62,7 @@ final class HotKey {
 ```
 
 The `KeyCombo` parses `cfg.hotkey.palette` strings like `"CommandOrControl+Shift+Space"`
-into `(keyCode, modifiers)`. On config hot-reload, uninstall + reinstall.
+into `(keyCode, modifiers)`. When `hotkey.palette` changes (Settings or sync), uninstall + reinstall.
 
 If registration fails (another app holds the combo): log error, surface a banner in
 Settings → Hotkey, app continues to run (matches ADR-010).

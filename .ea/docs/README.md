@@ -1,66 +1,43 @@
 # Nexus docs
 
-Native macOS menu bar toolkit — Pomodoro timer, time tracker, image uploader,
-command palette. Single AppKit + SwiftUI binary (post-v1.0.0 Swift rewrite of
-the original Electron app).
+Nexus is the Mac side of the ea system. The menu bar app records what the user does on
+each Mac (pomodoro sessions, the app and project in front) and acts on the Mac (pomodoro,
+palette, image upload). The server holds every Mac's data, turns tracker rows into day
+summaries, and serves them to the `nexus` CLI, the web app, and intake. Plan:
+[../roadmap.md](../roadmap.md); positioning: [../log/2026-10-30-positioning.md](../log/2026-10-30-positioning.md).
 
-The Swift implementation is the active codebase. The Electron-era source tree
-is archived at the `legacy/electron` git tag; selected portions of its design
-docs are kept under [`legacy-electron/`](legacy-electron/) for ADR cross-reference.
-
-## Goals (achieved at v1.0.0)
-- **Runtime footprint**: ~230 MB RSS / 297 MB on disk → ~30–50 MB / ~13 MB
-- **One signed binary** for AX + Accessibility — no `osascript` polling, no
-  cross-binary permission friction (former ADR-001)
-- **Native macOS feel**: Core Animation popover, NSPanel palette, AX API, GRDB
-- **Standard macOS data layout** (v1.2.0+): config + db in Application Support,
-  cache in Caches, log in Logs — all keyed by bundle id.
-
-## Non-goals
-- Cross-platform support — macOS only
-- Feature parity with Raycast/Alfred — palette stays scoped to Nexus actions
-- Plugin/extension API
-
-## Module Index
-
-What comes next: [../roadmap.md](../roadmap.md). Discussions and incidents: [../log/](../log/).
+## Pages
 
 | File | Content |
 |------|---------|
-| [architecture.md](architecture.md) | App lifecycle, target layout, persistence, in-process services |
-| [pomodoro.md](pomodoro.md) | Pomodoro state machine, popover layout, stats |
-| [tracker.md](tracker.md) | AX-API window tracking, idle detection, GRDB storage |
-| [uploader.md](uploader.md) | ImageIO compression, GitHub REST upload, drop targets |
-| [palette.md](palette.md) | NSPanel palette, global hotkey, `nexus://` scheme, CommandRegistry |
-| [sync.md](sync.md) | Multi-Mac sync: record kinds, the `services/server` HTTP contract, merge and first-contact rules, export, deploy |
-| [../log/decisions.md](../log/decisions.md) | Swift ADRs (SADR-001 .. SADR-019), append-only. Cross-references `legacy-electron/decisions.md` for the original ADR-NNN entries |
-| [migration.md](migration.md) | Electron→Swift data compatibility, rollout strategy |
-| [pitfalls.md](pitfalls.md) | Postmortem of traps hit during the migration. Read before adopting any of these patterns in a new project |
-| [legacy-electron/](legacy-electron/) | Two preserved Electron-era spec files (architecture.md, decisions.md). Kept solely so SADR entries that say "see ADR-009" still resolve in working tree. Full Electron sources/spec at `legacy/electron` git tag |
+| [architecture.md](architecture.md) | The three parts, app target layout, lifecycle, data layout, distribution |
+| [pomodoro.md](pomodoro.md) | Pomodoro state machine, popover, stats |
+| [tracker.md](tracker.md) | How time is recorded: polling, idle and lock rules, enrichment |
+| [uploader.md](uploader.md) | ImageIO compression, GitHub upload, drop targets |
+| [palette.md](palette.md) | NSPanel palette, global hotkey, `nexus://`, CommandRegistry |
+| [sync.md](sync.md) | Sync: record kinds, the server's HTTP contract, users and keys, day summaries, export, deploy |
+| [cli.md](cli.md) | The `nexus` CLI and its skill |
+| [web.md](web.md) | The web app: landing page, login, Today, History, Devices |
+| [pitfalls.md](pitfalls.md) | Traps already hit; read before reusing a pattern |
+| [../log/decisions.md](../log/decisions.md) | Decisions (SADR-001 .. SADR-020), append-only |
+
+The Electron app that preceded the Swift rewrite is at the `legacy/electron` git tag.
 
 ## Quick reference
 
-| Item | Electron (legacy) | Swift (current) |
-|---|---|---|
-| Bundle ID | `site.easonsi.nexus` | **same** (preserves Accessibility grant) |
-| Min macOS | macOS 11+ (Electron 33) | macOS 13.0 (SwiftUI Charts, `MenuBarExtra`) |
-| Architectures | per-arch DMG | universal binary (single DMG) |
-| Data dir | `~/.ea/nexus/` | `~/Library/Application Support/site.easonsi.nexus/` (config + db); `~/Library/Caches/...` (thumbnails); `~/Library/Logs/...` (main.log). See SADR-015 |
-| Config | `config.yaml` | `config.json` (Codable, hot-reloadable) |
-| Pomodoro store | `data.json` (electron-store) | GRDB SQLite |
-| Tracker store | `tracker/YYYY-MM-DD.json` | GRDB SQLite |
-| Uploader store | `uploader.json` + cache | GRDB SQLite + Caches dir |
-| Logs | `logs/main.log` | `~/Library/Logs/site.easonsi.nexus/main.log` (OSLog + file mirror) |
-| Distribution | electron-builder DMG, ad-hoc | `xcodebuild` archive + DMG, ad-hoc |
-| Auto-update | none | none (Sparkle deferred — see SADR-006) |
-| Homebrew cask | `lightblues/homebrew-tap` | **same** cask, no per-arch block |
+| Item | Value |
+|---|---|
+| Bundle ID | `site.easonsi.nexus` (frozen) |
+| Min macOS | 13.0; universal binary |
+| Data | `~/Library/Application Support/site.easonsi.nexus/nexus.db` (records and settings), `sync.json`; `~/Library/Caches/...`; `~/Library/Logs/.../main.log` |
+| Server | `https://nexus.easonsi.site` (`services/server`, devcloud) |
+| Install | `brew install --cask lightblues/tap/nexus`; beta: `scripts/beta.sh install` |
 
-## Coding Style (delta from project CLAUDE.md)
+## Coding style
 
-The CLAUDE.md style still applies (compact, type-hinted, minimal docstrings, English).
-Swift specifics:
-- No force-unwraps in non-test code; use `guard let` or `??`.
-- Prefer `@Observable` + Swift Concurrency over Combine where possible.
-- Targeting macOS 13: when an `@Observable`-only API isn't usable, fall back to
-  `ObservableObject`. Note the choice in the file header.
-- Keep modules under 300 lines.
+The repository style applies (compact, typed, minimal docstrings, English). Swift: no
+force-unwraps outside tests; `ObservableObject` (macOS 13); keep files under 300 lines.
+
+## Non-goals
+
+Cross-platform; feature parity with Raycast or Alfred; a plugin API.

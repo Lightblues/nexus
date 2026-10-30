@@ -51,24 +51,24 @@ Mirrors [`.ea/docs/architecture.md`](.ea/docs/architecture.md):
 ```
 Nexus/
 ├── App/                # @main, AppDelegate, AppEnvironment
-├── Core/               # Paths, Config, DataStore, Logger, Database, ...
+├── Core/               # Paths, Config (settings in nexus.db), Logger, Database, ...
 ├── Features/
 │   ├── Pomodoro/       # Timer service + popover + sheets
 │   ├── Tracker/        # Active-window polling + stats
 │   ├── Uploader/       # GitHub image uploader + jsdelivr CDN
 │   ├── Palette/        # ⌘K command palette
 │   └── ...
-└── Resources/          # Info.plist, Assets, default-config.json
+└── Resources/          # Info.plist, Assets
 ```
 
 ## Data
 
-User data lives in the standard macOS places (SADR-015): config and the SQLite
-database in `~/Library/Application Support/site.easonsi.nexus/`, thumbnails in
-`~/Library/Caches/site.easonsi.nexus/`, the log in `~/Library/Logs/site.easonsi.nexus/`.
-Coming from a version before v1.2.0 (data in `~/.ea/nexus/`)? Run
-`./scripts/migrate-data-v1.2.0.sh` once before the first launch; the app itself does
-not migrate (the in-app migration was removed in v1.2.0).
+User data lives in the standard macOS places (SADR-015): the SQLite database, which
+also holds the settings, in `~/Library/Application Support/site.easonsi.nexus/`,
+thumbnails in `~/Library/Caches/site.easonsi.nexus/`, the log in
+`~/Library/Logs/site.easonsi.nexus/`. There is no config file: change settings in the
+app or with `nexus config set`. Versions before v1.2.0 used `~/.ea/nexus/`; that data
+is not read any more.
 
 Sync (off by default): Settings → Sync, turn it on and paste the server key;
 settings, pomodoro data and tracker records then converge across Macs through

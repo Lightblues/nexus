@@ -1,12 +1,12 @@
 import Foundation
 
-/// Where the app keeps its settings (`config.json`). `load` returns the whole config as a JSON object.
+/// Where the app keeps its settings. `load` returns the whole config as a JSON object.
 public protocol SettingsStore: Sendable {
     func load() async throws -> [String: JSONValue]
     func save(_ settings: [String: JSONValue]) async throws
 }
 
-/// `config.json` ↔ dotted-key leaves.
+/// A settings object ↔ dotted-key leaves.
 public enum Settings {
     /// Leaves keyed by dotted path, e.g. `pomodoro.workDuration`. Arrays are leaves.
     public static func flatten(_ object: [String: JSONValue], prefix: String = "") -> [String: JSONValue] {

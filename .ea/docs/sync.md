@@ -16,7 +16,7 @@ One record per row, keyed by `(kind, id)`. Bodies are JSON objects; the server c
 
 | Kind | Local source | Id | Body |
 |---|---|---|---|
-| `setting` | `config.json` (`AppConfig`) | dotted key path of a leaf, e.g. `pomodoro.workDuration`, `uploader.github.token`, `tracker.enrichApps` | `{ value }`. An array is one leaf |
+| `setting` | `settings` table (`AppConfig` leaves) | dotted key path of a leaf, e.g. `pomodoro.workDuration`, `uploader.github.token`, `tracker.enrichApps` | `{ value }`. An array is one leaf |
 | `pomodoro_session` | `pomodoro_sessions` + `pomodoro_session_tags` | the session's text `id` | `{ kind, startTime, endTime, duration, project, task, completedFully, tags }`; `tags` is the session's tag names |
 | `pomodoro_project` | `pomodoro_projects` | `name` | `{ color, createdAt }` |
 | `pomodoro_tag` | `pomodoro_tag_catalog` | `name` | `{ createdAt }` |
@@ -48,7 +48,7 @@ Settings sync whole, with no whitelist; the uploader's GitHub token is a setting
 |---|---|
 | `NexusSync.swift` | `NexusSync.registerMigrations(_:)`: migration `sync_v1` and the triggers |
 | `Records.swift` | `SyncRecord`, `PushResult`, `PullPage`; `RecordKind`, the row ↔ body mapping for each table kind |
-| `Settings.swift` | `SettingsStore` protocol; flattening `config.json` to dotted keys |
+| `Settings.swift` | `SettingsStore` protocol; flattening `AppConfig` to dotted keys |
 | `SyncClient.swift` | `SyncAPI` protocol; `SyncClient` (base URL, key, injectable `URLSession`) |
 | `SyncEngine.swift` | `SyncEngine` actor: `sync()`, `deviceID()` |
 
@@ -68,7 +68,7 @@ Any thrown error (network, HTTP status, cancellation) leaves the outbox and the 
 
 **Wiring in the app** (nexus-018, `Nexus/Features/Sync/`):
 - `Migrator.migrator` calls `NexusSync.registerMigrations(&m)` after the app's own migrations.
-- **Connection** (`SyncConnection`): `enabled` (default off), `server` (default `https://nexus.easonsi.site`), `key`, in `sync.json` (mode 0600) next to `config.json`. It is not part of `AppConfig`, so it never syncs and a first contact cannot overwrite another Mac's connection. This Mac's sync state (`device`, `cursor`, `server`) stays in `sync_state`.
+- **Connection** (`SyncConnection`): `enabled` (default off), `server` (default `https://nexus.easonsi.site`), `key`, in `sync.json` (mode 0600) next to `nexus.db`. It is not part of `AppConfig`, so it never syncs and a first contact cannot overwrite another Mac's connection. This Mac's sync state (`device`, `cursor`, `server`) stays in `sync_state`.
 - `ConfigSettingsStore`: `load` encodes `ConfigService.config` to a JSON object, `save` decodes it into `AppConfig` and calls `ConfigService.save` on the main actor. Every `AppConfig` key syncs, hotkey and window size included.
 - `SyncCoordinator` (main actor) owns one `SyncEngine(db: database.queue, api: SyncClient(baseURL:key:), settings:)`, created only while the connection is enabled with a key and a valid URL; with sync off there is no engine and no network. It runs `sync()` after bootstrap, every 5 minutes, 10 s after the Mac wakes, and 5 s after the last edit (debounced) to pomodoro tables (`DatabaseRegionObservation`) or `config`. Tracker records change every poll, so they ride the 5-minute timer. One sync at a time; an edit during a sync (including the sync's own writes) schedules one follow-up. A failed sync backs off (30 s doubling to 30 min; edits and wake wait for it, "Sync now" does not) and shows in the status, never as an alert.
 - After a sync that pulled or got `stale` records, `PomodoroRepository.refresh()` and `TrackerRepository.reload()` update the published projections.
