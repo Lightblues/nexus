@@ -16,7 +16,7 @@ unit() {
   [[ -e "$data" ]] && had_data=1
   (cd "$PROJECT_DIR" && xcodegen generate >/dev/null)
   if ! xcodebuild -project "$PROJECT_DIR/Nexus.xcodeproj" -scheme Nexus -destination 'platform=macOS' \
-    CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO test >"$log" 2>&1; then
+    ONLY_ACTIVE_ARCH=YES CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO test >"$log" 2>&1; then
     grep -E "error:|failed|Failing tests" "$log" || tail -50 "$log"
     echo "Unit tests failed (full log: $log)"; exit 1
   fi
