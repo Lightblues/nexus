@@ -28,6 +28,8 @@ final class TrackerService: ObservableObject {
     private var pollTimer: Timer?
     private var configCancellable: AnyCancellable?
     private var permissionCheckTimer: Timer?
+    /// The system Accessibility prompt is raised once per launch; macOS limits how often it shows.
+    private var promptedAccessibility = false
 
     init(repository: TrackerRepository, config: ConfigService) {
         self.repository = repository
@@ -63,6 +65,10 @@ final class TrackerService: ObservableObject {
             stopPolling()
             status = .waitingForPermission
             Log.tracker.warn("waiting for Accessibility permission — grant in System Settings → Privacy & Security → Accessibility")
+            if !promptedAccessibility {
+                promptedAccessibility = true
+                Permissions.promptAccessibility()
+            }
             schedulePermissionRecheck()
             return
         }

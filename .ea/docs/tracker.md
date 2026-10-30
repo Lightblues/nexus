@@ -155,8 +155,10 @@ Lives in MainWindow's `tracker` route. Layout:
 
 ## Permissions
 
-- AX: requested via `Permissions.requestAccessibility()` on first
-  `TrackerService.start()`.
+- AX: `Permissions.promptAccessibility()` raises the macOS prompt the first time
+  `TrackerService.applyConfig` finds the tracker enabled but untrusted, once per launch;
+  the 2 s recheck then resumes polling when access is granted. Builds signed with the
+  stable identity keep the grant across upgrades (SADR-018).
 - Apple Events (for browser URL): requested lazily on first browser title needing
   URL. If denied, log + degrade. Both cases surface in Settings → Tracker as a
   banner with an "Open System Settings" deep link.
