@@ -35,10 +35,13 @@ install() {
   git -C "$(brew --repository lightblues/tap)" pull -q
   local was_running=0; running && was_running=1
   if installed nexus; then quit_app; brew uninstall --cask nexus; fi
-  if installed nexus@beta; then brew upgrade --cask nexus@beta || true; else quit_app; brew install --cask lightblues/tap/nexus@beta; fi
+  if ! installed nexus@beta; then quit_app; brew install --cask lightblues/tap/nexus@beta
+  elif [[ ! -d /Applications/Nexus.app ]]; then brew reinstall --cask nexus@beta
+  else brew upgrade --cask nexus@beta || true; fi
 
   mkdir -p "$HOME_DIR" "$(dirname "$LOG")" "$(dirname "$AGENT")"
-  if [[ -f "${BASH_SOURCE[0]:-}" ]]; then cp "${BASH_SOURCE[0]}" "$SELF"; else curl -fsSL "$SCRIPT_URL" -o "$SELF"; fi
+  if [[ -f "${BASH_SOURCE[0]:-}" ]]; then cp "${BASH_SOURCE[0]}" "$SELF"
+  else curl -fsSL --retry 3 --retry-all-errors "$SCRIPT_URL" -o "$SELF"; fi
   chmod 755 "$SELF"
   cat > "$AGENT" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -63,6 +66,9 @@ PLIST
 update() {
   installed nexus@beta || { log "nexus@beta not installed"; exit 0; }
   git -C "$(brew --repository lightblues/tap)" pull -q
+  if [[ ! -d /Applications/Nexus.app ]]; then
+    log "Nexus.app missing; reinstalling"; brew reinstall --cask nexus@beta || log "brew reinstall exited $?"; exit 0
+  fi
   [[ -n "$(brew outdated --cask --quiet nexus@beta)" ]] || exit 0
   local was_running=0; running && was_running=1
   log "upgrading $(brew list --cask --versions nexus@beta)"
