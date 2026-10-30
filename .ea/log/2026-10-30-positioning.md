@@ -1,6 +1,6 @@
 # 2026-10-30: nexus positioning, data flow, agent-native, web
 
-Status: proposed (2026-10-30), waiting for the user's review. Plan: [`../roadmap.md`](../roadmap.md).
+Status: accepted (2026-10-30); the relay is deferred, and open questions 2, 4 and 5 are decided in the roadmap. Plan: [`../roadmap.md`](../roadmap.md).
 
 Participants: Eason + Cursor agent (on devcloud_cpu). Inputs: the user's notes of 2026-10-30; iris `.ea/roadmap.md` and `.ea/log/2026-10-30-positioning-review.md` (the method reused here); baton `.ea/roadmap.md` and `research/building-with-ai/`; intake `.ea/log/2026-10-23-product-boundaries.md` and `.ea/roadmap.md` (item 4, device relay); the 2026-10-27 sync rollout ([2026-10-27-sync.md](2026-10-27-sync.md)).
 
