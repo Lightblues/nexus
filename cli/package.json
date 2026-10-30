@@ -1,0 +1,37 @@
+{
+  "name": "@lightblues/nexus",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Read your Nexus days from the sync server: today, history, activity rows, devices, categories, settings",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Lightblues/nexus.git",
+    "directory": "cli"
+  },
+  "bin": {
+    "nexus": "dist/nexus.js"
+  },
+  "files": [
+    "dist/nexus.js",
+    "skills",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "start": "node src/main.ts",
+    "test": "node --test test/*.test.ts",
+    "typecheck": "tsc --noEmit -p .",
+    "bundle": "node scripts/bundle.mjs",
+    "prepack": "node scripts/bundle.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.9.3"
+  }
+}
