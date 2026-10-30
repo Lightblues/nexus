@@ -63,9 +63,12 @@ Nexus/
 
 ## Data
 
-User data lives at `~/.ea/nexus/` (config, SQLite databases, log mirror).
-Schema-compatible with the Electron build's data files — first launch
-auto-migrates legacy JSON stores.
+User data lives in the standard macOS places (SADR-015): config and the SQLite
+database in `~/Library/Application Support/site.easonsi.nexus/`, thumbnails in
+`~/Library/Caches/site.easonsi.nexus/`, the log in `~/Library/Logs/site.easonsi.nexus/`.
+Coming from a version before v1.2.0 (data in `~/.ea/nexus/`)? Run
+`./scripts/migrate-data-v1.2.0.sh` once before the first launch; the app itself does
+not migrate (the in-app migration was removed in v1.2.0).
 
 Sync (off by default): Settings → Sync, turn it on and paste the server key;
 settings, pomodoro data and tracker records then converge across Macs through
