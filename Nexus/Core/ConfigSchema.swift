@@ -1,12 +1,10 @@
 import Foundation
 
-/// Mirrors `config.json` schema. See ../resources/default-config.json or
-/// ../.ea/docs/swift/architecture.md.
+/// The app's settings; stored as leaves in nexus.db (`ConfigService`) and synced per leaf.
 ///
 /// All structs use Codable with explicit `init(from:)` so that *any* missing field
-/// falls back to its default value. This means hand-edited config.json files
-/// stay valid as we add new fields, and YAML→JSON migrations missing newer
-/// keys (like `openAtLogin`) don't break loading.
+/// falls back to its default value: a leaf added in a newer version, or one a sync
+/// from an older version never sent, decodes to its default.
 struct AppConfig: Codable, Equatable {
     var pomodoro: PomodoroConfig = .init()
     var ui: UIConfig = .init()
@@ -23,6 +21,13 @@ struct AppConfig: Codable, Equatable {
         tracker  = (try? c.decode(TrackerConfig.self, forKey: .tracker)) ?? .init()
         hotkey   = (try? c.decode(HotkeyConfig.self, forKey: .hotkey)) ?? .init()
         uploader = (try? c.decode(UploaderConfig.self, forKey: .uploader)) ?? .init()
+    }
+
+    /// Rewrites values that were defaults in an older version to today's defaults.
+    func upgraded() -> AppConfig {
+        var out = self
+        if out.tracker.enrichApps == TrackerConfig.legacyEnrichApps { out.tracker.enrichApps = TrackerConfig.defaultEnrichApps }
+        return out
     }
 }
 
@@ -50,19 +55,6 @@ struct PomodoroConfig: Codable, Equatable {
     }
 }
 
-/// Legacy projects + tags shape — kept only for one-shot migration into the DB
-/// at first launch. New code reads/writes through `PomodoroRepository.projects`
-/// + `.tagCatalog`.
-struct LegacyPomodoroCatalog: Codable {
-    var projects: [LegacyProjectConfig]?
-    var tags: [String]?
-}
-
-struct LegacyProjectConfig: Codable {
-    var name: String
-    var color: String
-}
-
 struct ProjectConfig: Codable, Equatable, Identifiable {
     var name: String
     var color: String
@@ -88,7 +80,12 @@ struct TrackerConfig: Codable, Equatable {
     var pollInterval: Int = 5
     var idleThreshold: Int = 120
     var recordTitle: Bool = false
-    var enrichApps: [String] = ["Code", "Google Chrome"]
+    var enrichApps: [String] = TrackerConfig.defaultEnrichApps
+
+    /// Every app `ContextEnricher` knows how to enrich, by the name the probe reports.
+    static let defaultEnrichApps = ["Code", "Code - Insiders", "Cursor", "Google Chrome", "Google Chrome Beta", "Safari", "Arc"]
+    /// The default before v1.3.2, when the editors and browsers above were enriched regardless of the list.
+    static let legacyEnrichApps = ["Code", "Google Chrome"]
 
     init() {}
     init(from decoder: Decoder) throws {
@@ -97,7 +94,7 @@ struct TrackerConfig: Codable, Equatable {
         pollInterval = (try? c.decode(Int.self, forKey: .pollInterval)) ?? 5
         idleThreshold = (try? c.decode(Int.self, forKey: .idleThreshold)) ?? 120
         recordTitle = (try? c.decode(Bool.self, forKey: .recordTitle)) ?? false
-        enrichApps = (try? c.decode([String].self, forKey: .enrichApps)) ?? ["Code", "Google Chrome"]
+        enrichApps = (try? c.decode([String].self, forKey: .enrichApps)) ?? TrackerConfig.defaultEnrichApps
     }
 }
 

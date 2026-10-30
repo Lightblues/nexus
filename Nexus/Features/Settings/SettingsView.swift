@@ -47,8 +47,6 @@ struct SettingsView: View {
                 Divider()
             }
             ScrollView { tabContent.padding(20) }
-            Divider()
-            bottomBar
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
@@ -58,7 +56,7 @@ struct SettingsView: View {
                 initialized = true
             }
         }
-        // External changes (sync, a hand-edited config.json) rebase the draft:
+        // External changes (sync, the nexus CLI through sync) rebase the draft:
         // keys the user has not edited take the new value, edited keys keep theirs.
         .onChange(of: config.config) { newValue in
             draft = draft.rebased(from: base, onto: newValue)
@@ -154,48 +152,6 @@ struct SettingsView: View {
         case .sync:     SyncSettingsForm()
         }
     }
-
-    // MARK: - Bottom bar
-
-    private var bottomBar: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "doc.text").foregroundStyle(.tertiary)
-            Text("config.json")
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(.secondary)
-            Text(displayPath)
-                .font(.system(size: 11))
-                .foregroundStyle(.tertiary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-            Spacer()
-            Button("Reveal in Finder") { revealInFinder() }
-                .controlSize(.small)
-            Button("Open in Editor") { openInEditor() }
-                .controlSize(.small)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-    }
-
-    private var displayPath: String {
-        let url = Paths.configFile
-        if let resolved = try? FileManager.default.destinationOfSymbolicLink(atPath: url.path) {
-            return "→ \(resolved)"
-        }
-        return url.path.replacingOccurrences(of: NSHomeDirectory(), with: "~")
-    }
-
-    private func revealInFinder() {
-        let url = Paths.configFile
-        let resolved = (try? URL(fileURLWithPath: FileManager.default
-            .destinationOfSymbolicLink(atPath: url.path))) ?? url
-        NSWorkspace.shared.activateFileViewerSelecting([resolved])
-    }
-
-    private func openInEditor() {
-        NSWorkspace.shared.open(Paths.configFile)
-    }
 }
 
 extension AppConfig {
@@ -210,7 +166,6 @@ extension AppConfig {
     }
 
     private static func leaves(_ config: AppConfig) throws -> [String: JSONValue] {
-        guard case .object(let object) = try JSONDecoder().decode(JSONValue.self, from: JSONEncoder().encode(config)) else { return [:] }
-        return Settings.flatten(object)
+        try ConfigService.leaves(of: config)
     }
 }

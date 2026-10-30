@@ -1,138 +1,103 @@
 import Foundation
+import GRDB
+import NexusSync
 
-/// JSON-backed config service with hot-reload via DispatchSourceFileSystemObject.
-/// Reads from `~/Library/Application Support/site.easonsi.nexus/config.json`; on
-/// missing file, copies the bundled default-config.json. Provides save() for the
-/// Settings GUI.
+/// Settings in the `settings` table of nexus.db, one row per leaf (`pomodoro.workDuration` → JSON),
+/// the same keys sync uses. Edited in Settings, by sync, or by the `nexus` CLI through the server;
+/// there is no config file to hand-edit.
 @MainActor
 final class ConfigService: ObservableObject {
     @Published private(set) var config: AppConfig = AppConfig()
 
-    private var fileSource: DispatchSourceFileSystemObject?
-    private var fileDescriptor: Int32 = -1
-    private var debounceWorkItem: DispatchWorkItem?
-    /// Set true while we're writing the file ourselves, so the file watcher
-    /// doesn't immediately trigger a reload that races with our write.
-    private var suppressNextReload = false
+    private let database: Database
+    /// `config.json` from before settings lived in the database; imported once, then renamed.
+    private let legacyFile: URL
 
-    init() {}
-
-    /// Load on launch + start watching the file. Idempotent.
-    func bootstrap() {
-        ensureConfigFileExists()
-        load()
-        startWatching()
+    init(database: Database, legacyFile: URL = Paths.legacyConfigFile) {
+        self.database = database
+        self.legacyFile = legacyFile
     }
 
-    func reloadNow() { load() }
-
-    /// Persist a new config value and write to disk atomically.
-    /// Triggers the next file-watcher event but suppresses its reload to avoid
-    /// re-decoding what we just encoded.
-    /// On mackup symlinks, follows the link so the real backed-up file gets
-    /// updated (replaceItemAt would replace the link itself).
-    func save(_ newValue: AppConfig) {
-        guard newValue != config else { return }
-        config = newValue
+    /// Load on launch. Idempotent.
+    func bootstrap() {
         do {
-            let data = try Self.encoder.encode(newValue)
-            suppressNextReload = true
-            let url = Paths.configFile
-            let target = (try? URL(fileURLWithPath: FileManager.default
-                .destinationOfSymbolicLink(atPath: url.path))) ?? url
-            try data.write(to: target, options: .atomic)
+            var leaves = try database.queue.read { try Self.readLeaves($0) }
+            if leaves.isEmpty, let imported = importLegacyFile() {
+                leaves = try Self.leaves(of: imported)
+                try write(leaves, over: [:])
+            }
+            let loaded = try Self.config(from: leaves)
+            config = loaded.upgraded()
+            if config != loaded { save(config, force: true) }
+            Log.config.info("Config loaded (\(leaves.count) keys)")
+        } catch {
+            Log.config.error("Config load failed: \(error). Using defaults.")
+        }
+    }
+
+    /// Persist a new config: only the leaves that changed are written.
+    func save(_ newValue: AppConfig) { save(newValue, force: false) }
+
+    private func save(_ newValue: AppConfig, force: Bool) {
+        let newValue = newValue.upgraded()
+        guard force || newValue != config else { return }
+        do {
+            let old = try database.queue.read { try Self.readLeaves($0) }
+            try write(try Self.leaves(of: newValue), over: old)
+            config = newValue
             Log.config.info("Config saved")
         } catch {
             Log.config.error("Config save failed: \(error)")
-            suppressNextReload = false
         }
     }
 
     // MARK: - Internals
 
-    private static let decoder: JSONDecoder = {
-        let d = JSONDecoder()
-        return d
-    }()
-
-    private static let encoder: JSONEncoder = {
-        let e = JSONEncoder()
-        e.outputFormatting = [.prettyPrinted, .sortedKeys]
-        return e
-    }()
-
-    private func ensureConfigFileExists() {
-        let fm = FileManager.default
-        let url = Paths.configFile
-        if fm.fileExists(atPath: url.path) { return }
-        guard let bundled = Bundle.main.url(forResource: "default-config", withExtension: "json") else {
-            Log.config.warn("default-config.json not found in bundle; writing minimal defaults")
-            try? Self.encoder.encode(AppConfig()).write(to: url)
-            return
-        }
-        do {
-            try fm.copyItem(at: bundled, to: url)
-            Log.config.info("Seeded config.json from bundled defaults")
-        } catch {
-            Log.config.error("Failed seeding config.json: \(error)")
-        }
-    }
-
-    private func load() {
-        let url = Paths.configFile
-        do {
-            let data = try Data(contentsOf: url)
-            let loaded = try Self.decoder.decode(AppConfig.self, from: data)
-            self.config = loaded
-            Log.config.info("Config loaded")
-        } catch {
-            Log.config.error("Config load failed: \(error). Using last good / defaults.")
-        }
-    }
-
-    private func startWatching() {
-        let url = Paths.configFile
-        let fd = open(url.path, O_EVTONLY)
-        guard fd != -1 else {
-            Log.config.warn("Cannot open config for watching: \(url.path)")
-            return
-        }
-        fileDescriptor = fd
-        let source = DispatchSource.makeFileSystemObjectSource(
-            fileDescriptor: fd,
-            eventMask: [.write, .delete, .rename, .extend],
-            queue: .main
-        )
-        source.setEventHandler { [weak self] in
-            self?.scheduleReload()
-        }
-        source.setCancelHandler { [fd] in close(fd) }
-        source.resume()
-        self.fileSource = source
-    }
-
-    private func scheduleReload() {
-        if suppressNextReload {
-            suppressNextReload = false
-            return
-        }
-        debounceWorkItem?.cancel()
-        let work = DispatchWorkItem { [weak self] in
-            guard let self else { return }
-            self.load()
-            // If watcher target was deleted/renamed, restart.
-            if !FileManager.default.fileExists(atPath: Paths.configFile.path) {
-                self.fileSource?.cancel()
-                self.fileSource = nil
-                self.ensureConfigFileExists()
-                self.startWatching()
+    private func write(_ leaves: [String: JSONValue], over old: [String: JSONValue]) throws {
+        let rows = try leaves.filter { old[$0.key] != $0.value }.map { ($0.key, try Self.text($0.value)) }
+        let removed = old.keys.filter { leaves[$0] == nil }
+        guard !rows.isEmpty || !removed.isEmpty else { return }
+        try database.queue.write { db in
+            for (key, value) in rows {
+                try db.execute(sql: "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", arguments: [key, value])
             }
+            for key in removed { try db.execute(sql: "DELETE FROM settings WHERE key = ?", arguments: [key]) }
         }
-        debounceWorkItem = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(150), execute: work)
     }
 
-    deinit {
-        fileSource?.cancel()
+    /// Reads the pre-database `config.json` (tolerant per field) and renames it, so it is imported once.
+    private func importLegacyFile() -> AppConfig? {
+        let fm = FileManager.default
+        guard let data = try? Data(contentsOf: legacyFile) else { return nil }
+        let imported = (try? JSONDecoder().decode(AppConfig.self, from: data)) ?? AppConfig()
+        let moved = legacyFile.deletingLastPathComponent().appendingPathComponent("config.json.imported")
+        try? fm.removeItem(at: moved)
+        do { try fm.moveItem(at: legacyFile, to: moved) } catch { Log.config.warn("Could not rename \(legacyFile.path): \(error)") }
+        Log.config.info("Imported config.json into the database")
+        return imported
+    }
+
+    nonisolated static func readLeaves(_ db: GRDB.Database) throws -> [String: JSONValue] {
+        var out: [String: JSONValue] = [:]
+        for row in try Row.fetchAll(db, sql: "SELECT key, value FROM settings") {
+            let text: String = row["value"]
+            out[row["key"]] = try JSONDecoder().decode(JSONValue.self, from: Data(text.utf8))
+        }
+        return out
+    }
+
+    nonisolated static func leaves(of config: AppConfig) throws -> [String: JSONValue] {
+        let value = try JSONDecoder().decode(JSONValue.self, from: JSONEncoder().encode(config))
+        guard case .object(let object) = value else { return [:] }
+        return Settings.flatten(object)
+    }
+
+    /// Missing or mistyped leaves take their defaults (`AppConfig`'s tolerant decoding).
+    nonisolated static func config(from leaves: [String: JSONValue]) throws -> AppConfig {
+        try JSONDecoder().decode(AppConfig.self, from: JSONEncoder().encode(JSONValue.object(Settings.unflatten(leaves))))
+    }
+
+    private nonisolated static func text(_ value: JSONValue) throws -> String {
+        String(decoding: try JSONEncoder().encode(value), as: UTF8.self)
     }
 }

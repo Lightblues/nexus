@@ -44,7 +44,6 @@ targets:
           - "**/.DS_Store"
     resources:
       - path: Nexus/Resources/Assets.xcassets
-      - path: Nexus/Resources/default-config.json
     dependencies:
       - package: GRDB
         product: GRDB

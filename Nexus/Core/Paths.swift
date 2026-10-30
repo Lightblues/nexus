@@ -2,13 +2,9 @@ import Foundation
 
 /// Standard macOS data layout, keyed by bundle identifier:
 ///
-///   ~/Library/Application Support/site.easonsi.nexus/   user-critical: config + db
+///   ~/Library/Application Support/site.easonsi.nexus/   user-critical: nexus.db (data and settings), sync.json
 ///   ~/Library/Caches/site.easonsi.nexus/                regenerable: thumbnails
 ///   ~/Library/Logs/site.easonsi.nexus/                  append-only: main.log
-///
-/// (Pre-v1.2.0 builds used ~/.ea/nexus/ for everything; the migration script
-/// `scripts/migrate-data-v1.2.0.sh` moves the user-critical files over and
-/// archives the rest to `~/.ea/nexus.pre-v1.2.0-bak-*`.)
 enum Paths {
     static let bundleID = "site.easonsi.nexus"
 
@@ -35,7 +31,8 @@ enum Paths {
 
     // MARK: - User-critical (Application Support)
 
-    static var configFile: URL { supportDir.appendingPathComponent("config.json") }
+    /// Settings before they moved into nexus.db (v1.3.2); imported once, then renamed `config.json.imported`.
+    static var legacyConfigFile: URL { supportDir.appendingPathComponent("config.json") }
     static var dbFile: URL     { supportDir.appendingPathComponent("nexus.db") }
     /// Sync connection (enabled, server, key). Local to this Mac, never synced.
     static var syncFile: URL   { supportDir.appendingPathComponent("sync.json") }

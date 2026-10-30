@@ -6,9 +6,14 @@ final class ConfigSchemaTests: XCTestCase {
         try JSONDecoder().decode(AppConfig.self, from: Data(json.utf8))
     }
 
-    func testBundledDefaultsEqualTheSwiftDefaults() throws {
-        let url = try XCTUnwrap(Bundle.main.url(forResource: "default-config", withExtension: "json"), "the host app bundles default-config.json")
-        XCTAssertEqual(try JSONDecoder().decode(AppConfig.self, from: Data(contentsOf: url)), AppConfig())
+    func testUpgradeReplacesTheOldEnrichDefaultOnly() {
+        var old = AppConfig()
+        old.tracker.enrichApps = ["Code", "Google Chrome"]
+        XCTAssertEqual(old.upgraded().tracker.enrichApps, TrackerConfig.defaultEnrichApps)
+        var custom = AppConfig()
+        custom.tracker.enrichApps = ["Google Chrome"]
+        XCTAssertEqual(custom.upgraded().tracker.enrichApps, ["Google Chrome"], "a list the user edited stays")
+        XCTAssertTrue(TrackerConfig.defaultEnrichApps.contains("Cursor"))
     }
 
     func testEmptyObjectIsAllDefaults() throws {

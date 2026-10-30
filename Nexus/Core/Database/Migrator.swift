@@ -115,6 +115,11 @@ enum Migrator {
         }
 
         NexusSync.registerMigrations(&m)
+
+        m.registerMigration("v5_settings") { db in
+            // Settings leaves, keyed as sync keys them (`pomodoro.workDuration`); values are JSON.
+            try db.execute(sql: "CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        }
         return m
     }
 }

@@ -21,6 +21,14 @@ final class Database: @unchecked Sendable {
         self.queue = queue
     }
 
+    /// An in-memory database with every migration applied, for tests.
+    static func inMemory() throws -> Database { try Database(queue: DatabaseQueue()) }
+
+    private init(queue: DatabaseQueue) throws {
+        try Migrator.migrator.migrate(queue)
+        self.queue = queue
+    }
+
     /// Async read helper. Use this from `@MainActor` services to avoid blocking UI.
     func read<T: Sendable>(_ block: @escaping @Sendable (GRDB.Database) throws -> T) async throws -> T {
         try await queue.read(block)
