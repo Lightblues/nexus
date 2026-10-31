@@ -29,8 +29,9 @@ was a write key: the read routes accept it, and `/api/sync/*`, `/api/settings` a
 
 ## PWA
 
-`manifest.webmanifest` (`start_url` `/app`, standalone), icons from `scripts/icon-source.png` (192, 512, 180 for
-`apple-touch-icon`, 32 favicon), `viewport-fit=cover` with safe-area padding, light and dark `theme-color`.
+`manifest.webmanifest` (`start_url` `/app`, standalone), icons rendered from `icons/icon.svg` by
+`scripts/generate-icons.py` (192, 512, 180 for `apple-touch-icon`, 32 favicon; the same script writes the Mac
+AppIcon set; the root `icon.svg` symlink is what Paseo shows), `viewport-fit=cover` with safe-area padding, light and dark `theme-color`.
 `sw.js` caches the shell (`nexus-shell-v1`): navigations under `/app` are network-first and fall back to the cached
 `/app` after 3 s, offline, or a 5xx; the shell files are network-first; `/api`, `/export`, `/login` are never
 touched. Bump the cache name when the shell's file list changes. No Web Push: nothing here needs to notify.
