@@ -1,5 +1,7 @@
 # Nexus Tracker — macOS WindowServer 拖累问题诊断与修复方案
 
+Status: notes; the Electron `TrackerService.ts` it diagnoses was replaced in the Swift rewrite by AX polling, with a compiled `NSAppleScript` only for browser URLs of apps in `enrichApps` (SADR-010).
+
 > Date: 2026-04-30(原始) / 2026-04-30 中午追加修正
 > Affected: `src/main/features/tracker/TrackerService.ts`
 > Severity: 🟠 Medium-High — Nexus 是**触发器之一**,不是唯一根因。本文档记录的代码改动仍然必要。

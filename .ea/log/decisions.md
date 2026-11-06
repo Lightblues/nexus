@@ -1,142 +1,99 @@
 # Swift-side Architecture Decisions (SADRs)
 
-Decisions since the Swift rewrite, append-only. "ADR-NNN" refers to the Electron app's
-decisions, at the `legacy/electron` git tag (`.ea/spec/decisions.md` there).
+Decisions since the Swift rewrite, append-only, newest at the bottom; ids are never reused. Reverse or narrow an entry by adding a new one that names it, and change only the old entry's `Status` line (`superseded by SADR-0xx`, `refined by SADR-0xx`). SADR-001 to SADR-020 were written before the shared format and keep their own sections (Context, Decision, Rejected alternatives, Consequences); their Date is the day the entry was first committed. "ADR-NNN" refers to the Electron app's decisions, at the `legacy/electron` git tag (`.ea/spec/decisions.md` there).
 
 ---
 
-## SADR-001: Keep bundle ID `site.easonsi.nexus`
-**Status**: Accepted
+## SADR-001. Keep bundle ID `site.easonsi.nexus`
 
-**Context**: macOS records Accessibility, Apple Events, and Notification grants by
-bundle ID. The Electron build's v0.5.0 release already paid the user-facing cost of
-renaming `com.ea.nexus → site.easonsi.nexus` (changelog notes a forced re-grant).
+**Date**: 2026-05-31
+**Status**: active
 
-**Decision**: The Swift binary keeps `site.easonsi.nexus`. Existing users' AX grant
-applies automatically the first time the new build runs. No re-prompt unless macOS
-detects a code-signing identity change (ad-hoc → ad-hoc is the same TeamID-less
-bucket, so it should pass through silently — verify in beta).
+**Context**: macOS records Accessibility, Apple Events, and Notification grants by bundle ID. The Electron build's v0.5.0 release already paid the user-facing cost of renaming `com.ea.nexus → site.easonsi.nexus` (changelog notes a forced re-grant).
 
-**Consequence**: Smooth upgrade. If the user installed via Homebrew cask, the cask
-upgrade replaces the bundle in-place and the AX grant survives.
+**Decision**: The Swift binary keeps `site.easonsi.nexus`. Existing users' AX grant applies automatically the first time the new build runs. No re-prompt unless macOS detects a code-signing identity change (ad-hoc → ad-hoc is the same TeamID-less bucket, so it should pass through silently — verify in beta).
+
+**Consequence**: Smooth upgrade. If the user installed via Homebrew cask, the cask upgrade replaces the bundle in-place and the AX grant survives.
 
 ---
 
-## SADR-002: AppKit `NSStatusItem` + `NSPopover`, not SwiftUI `MenuBarExtra`
-**Status**: Accepted
+## SADR-002. AppKit `NSStatusItem` + `NSPopover`, not SwiftUI `MenuBarExtra`
 
-**Context**: SwiftUI 13+ ships `MenuBarExtra` which appears to obsolete the AppKit
-status item dance. But: (a) the uploader feature drops images on the icon — needs
-the underlying button view to register drag types; (b) the pomodoro feature writes
-to `attributedTitle` 1Hz — `MenuBarExtra` re-renders the whole label; (c) custom
-popover sizing/animation is awkward in `MenuBarExtra`.
+**Date**: 2026-05-31
+**Status**: active
 
-**Decision**: Use `NSStatusItem` directly. SwiftUI views are embedded via
-`NSHostingController` inside `NSPopover`. The status button's view is replaced with
-a custom `NSView` subclass that hosts the icon and accepts drag types.
+**Context**: SwiftUI 13+ ships `MenuBarExtra` which appears to obsolete the AppKit status item dance. But: (a) the uploader feature drops images on the icon — needs the underlying button view to register drag types; (b) the pomodoro feature writes to `attributedTitle` 1Hz — `MenuBarExtra` re-renders the whole label; (c) custom popover sizing/animation is awkward in `MenuBarExtra`.
+
+**Decision**: Use `NSStatusItem` directly. SwiftUI views are embedded via `NSHostingController` inside `NSPopover`. The status button's view is replaced with a custom `NSView` subclass that hosts the icon and accepts drag types.
 
 **Rejected alternatives**:
-- `MenuBarExtra(.window)` — drag receiver isn't pluggable; would need private API
-  to attach drag types to the menu bar item.
-- Hybrid (MenuBarExtra for icon, custom NSPopover for content) — two ownership
-  models in conflict.
+- `MenuBarExtra(.window)` — drag receiver isn't pluggable; would need private API to attach drag types to the menu bar item.
+- Hybrid (MenuBarExtra for icon, custom NSPopover for content) — two ownership models in conflict.
 
-**Consequence**: ~50 lines of AppKit boilerplate at app start. In return, full
-control over the status item.
+**Consequence**: ~50 lines of AppKit boilerplate at app start. In return, full control over the status item.
 
 ---
 
-## SADR-003: `@Observable` over `ObservableObject`
-**Status**: Accepted (with macOS 13 fallback noted)
+## SADR-003. `@Observable` over `ObservableObject`
 
-**Context**: Swift 5.9 / macOS 14 introduced the `@Observable` macro, which removes
-`@Published` boilerplate and produces fine-grained dependency tracking. Available on
-the macOS-13 deployment target via the Observation backport in newer toolchains.
+**Date**: 2026-05-31
+**Status**: active (with macOS 13 fallback noted)
 
-**Decision**: Default to `@Observable` for all services. If a specific call site can't
-use it (e.g. legacy SwiftUI bridge), fall back to `ObservableObject` and document the
-reason at the top of the file.
+**Context**: Swift 5.9 / macOS 14 introduced the `@Observable` macro, which removes `@Published` boilerplate and produces fine-grained dependency tracking. Available on the macOS-13 deployment target via the Observation backport in newer toolchains.
 
-**Consequence**: Less boilerplate, fewer over-renders. Slight risk if the
-Observation backport surfaces compatibility issues — bake into the beta phase.
+**Decision**: Default to `@Observable` for all services. If a specific call site can't use it (e.g. legacy SwiftUI bridge), fall back to `ObservableObject` and document the reason at the top of the file.
+
+**Consequence**: Less boilerplate, fewer over-renders. Slight risk if the Observation backport surfaces compatibility issues — bake into the beta phase.
 
 ---
 
-## SADR-004: One target, no XPC services, no helper bundles
-**Status**: Accepted
+## SADR-004. One target, no XPC services, no helper bundles
 
-**Context**: The Electron build ships 4 helper bundles (Renderer, GPU, Plugin,
-Network) — each a separate process driven by Chromium's sandbox model. Translating
-that to Swift's XPC services would reproduce the multi-process overhead we're
-trying to escape (~80 MB across helpers in the Electron build).
+**Date**: 2026-05-31
+**Status**: active
 
-**Decision**: Single binary. AX polling, image compression, network upload, UI all
-run in the same process. Use Swift Concurrency (`Task.detached`, actors) for
-concurrency without process boundaries.
+**Context**: The Electron build ships 4 helper bundles (Renderer, GPU, Plugin, Network) — each a separate process driven by Chromium's sandbox model. Translating that to Swift's XPC services would reproduce the multi-process overhead we're trying to escape (~80 MB across helpers in the Electron build).
+
+**Decision**: Single binary. AX polling, image compression, network upload, UI all run in the same process. Use Swift Concurrency (`Task.detached`, actors) for concurrency without process boundaries.
 
 **Rejected alternatives**:
-- XPC service for image compression — would isolate sharp-equivalent crashes from
-  the main app, but ImageIO is mature and crash-resistant; not worth the IPC
-  overhead and bundle complexity.
+- XPC service for image compression — would isolate sharp-equivalent crashes from the main app, but ImageIO is mature and crash-resistant; not worth the IPC overhead and bundle complexity.
 - XPC service for the AX poller — same reasoning. AX call failures are recoverable.
 
-**Consequence**: Simpler bundle structure. Single Accessibility prompt. No nested
-codesign chain (sidesteps the Electron-build ADR-011 trap entirely).
+**Consequence**: Simpler bundle structure. Single Accessibility prompt. No nested codesign chain (sidesteps the Electron-build ADR-011 trap entirely).
 
 ---
 
-## SADR-005: Drop `electron-store` shape, use per-feature codable JSON
-**Status**: Accepted
+## SADR-005. Drop `electron-store` shape, use per-feature codable JSON
 
-**Context**: electron-store wraps user data in a top-level container with a
-`__internal__` schema-version key. The Swift port could mimic that, but the only
-purpose was electron-store's own bookkeeping.
+**Date**: 2026-05-31
+**Status**: active
 
-**Decision**: Each feature owns a typed `Codable` struct serialized as the root JSON
-object. `data.json` becomes `PomodoroData`; `uploader.json` becomes `UploaderData`;
-tracker keeps per-day files. A small migration step on first launch reads the
-electron-store wrapped form and rewrites it as the bare struct (see `migration.md`).
+**Context**: electron-store wraps user data in a top-level container with a `__internal__` schema-version key. The Swift port could mimic that, but the only purpose was electron-store's own bookkeeping.
 
-**Consequence**: One-way migration on first Swift launch. Files become more readable
-(no extra wrapping). Future schema changes use a `version: Int` field at the struct
-root.
+**Decision**: Each feature owns a typed `Codable` struct serialized as the root JSON object. `data.json` becomes `PomodoroData`; `uploader.json` becomes `UploaderData`; tracker keeps per-day files. A small migration step on first launch reads the electron-store wrapped form and rewrites it as the bare struct (see `migration.md`).
+
+**Consequence**: One-way migration on first Swift launch. Files become more readable (no extra wrapping). Future schema changes use a `version: Int` field at the struct root.
 
 ---
 
-## SADR-006: Sparkle for auto-update
-**Status**: Deferred. Reassess only after / together with adopting Apple Developer ID + Notarization.
+## SADR-006. Sparkle for auto-update
 
-**Context**: The Electron build has no auto-update — users get new versions only via
-`brew upgrade --cask nexus`. That's fine for the `brew` users but loses the chance
-to nudge non-Homebrew installers.
+**Date**: 2026-05-31
+**Status**: deferred; reassess only after / together with adopting Apple Developer ID + Notarization
 
-**Originally proposed**: Integrate Sparkle 2 with EdDSA-signed appcast at
-`https://github.com/Lightblues/nexus/releases/latest/download/appcast.xml`. Auto-check
-weekly, prompt user before downloading. The Homebrew tap continues to work as the
-primary distribution; Sparkle is a fallback for direct DMG users and a way to surface
-release notes inside the app.
+**Context**: The Electron build has no auto-update — users get new versions only via `brew upgrade --cask nexus`. That's fine for the `brew` users but loses the chance to nudge non-Homebrew installers.
+
+**Originally proposed**: Integrate Sparkle 2 with EdDSA-signed appcast at `https://github.com/Lightblues/nexus/releases/latest/download/appcast.xml`. Auto-check weekly, prompt user before downloading. The Homebrew tap continues to work as the primary distribution; Sparkle is a fallback for direct DMG users and a way to surface release notes inside the app.
 
 **Why deferred — the short version**
 
-1. The audience that benefits from Sparkle (non-brew users wanting one-click in-app
-   updates) is currently empty. All current users are on `brew upgrade --cask`.
-2. **Sparkle on top of ad-hoc-signed builds is an anti-pattern**, not a partial step
-   toward better UX:
-   - Sparkle does not interact with macOS code signing or Gatekeeper. Its EdDSA
-     signature only protects the appcast + DMG download integrity (against MitM /
-     compromised CDN); it never participates in the OS's "is this app trustworthy"
-     check.
-   - Brew currently strips the `com.apple.quarantine` xattr in its cask install path
-     (and `install-local.sh` does the same for local DMG installs). Sparkle does
-     **not** strip quarantine — it assumes the .app is properly signed and notarized.
-   - On Nexus's current ad-hoc identity (`-`), every Sparkle-pushed update would
-     trigger Gatekeeper's "Apple cannot verify the developer of Nexus" dialog on the
-     first post-update launch. That makes the Sparkle UX *worse* than `brew upgrade`,
-     not better.
-3. The actual prerequisite is **Apple Developer ID signing + Notarization** — a
-   separate decision (~$99/yr + CI changes). Once notarized, the app is trusted
-   regardless of distribution channel (brew, Sparkle, raw DMG download), and Sparkle
-   becomes worth its integration cost.
+1. The audience that benefits from Sparkle (non-brew users wanting one-click in-app updates) is currently empty. All current users are on `brew upgrade --cask`.
+2. **Sparkle on top of ad-hoc-signed builds is an anti-pattern**, not a partial step toward better UX:
+   - Sparkle does not interact with macOS code signing or Gatekeeper. Its EdDSA signature only protects the appcast + DMG download integrity (against MitM / compromised CDN); it never participates in the OS's "is this app trustworthy" check.
+   - Brew currently strips the `com.apple.quarantine` xattr in its cask install path (and `install-local.sh` does the same for local DMG installs). Sparkle does **not** strip quarantine — it assumes the .app is properly signed and notarized.
+   - On Nexus's current ad-hoc identity (`-`), every Sparkle-pushed update would trigger Gatekeeper's "Apple cannot verify the developer of Nexus" dialog on the first post-update launch. That makes the Sparkle UX *worse* than `brew upgrade`, not better.
+3. The actual prerequisite is **Apple Developer ID signing + Notarization** — a separate decision (~$99/yr + CI changes). Once notarized, the app is trusted regardless of distribution channel (brew, Sparkle, raw DMG download), and Sparkle becomes worth its integration cost.
 
 **Decision tree for revisiting**:
 
@@ -148,8 +105,7 @@ Has Nexus adopted Developer ID + Notarization?
          └─ Yes → Adopt Sparkle 2 with EdDSA appcast. ~5h integration + key management.
 ```
 
-**Common Sparkle confusions worth nailing down** (so future-us / contributors don't
-re-litigate):
+**Common Sparkle confusions worth nailing down** (so future-us / contributors don't re-litigate):
 
 | Claim | Reality |
 |---|---|
@@ -160,22 +116,20 @@ re-litigate):
 
 **Consequences of the deferral**:
 
-- Release flow stays brew-only. Users update by `brew upgrade --cask nexus` (or
-  re-running `install-local.sh` for direct DMG).
+- Release flow stays brew-only. Users update by `brew upgrade --cask nexus` (or re-running `install-local.sh` for direct DMG).
 - No EdDSA key to manage. No appcast.xml to keep in sync.
 - The day we adopt Developer ID, this SADR's tree above gates the next move.
 
 ---
 
-## SADR-007: Yams for YAML, not custom parser
-**Status**: Accepted
+## SADR-007. Yams for YAML, not custom parser
 
-**Context**: Three real choices for YAML parsing in Swift: Yams (LibYAML wrapper —
-mature), a hand-rolled parser, or shelling out to a YAML CLI. The config schema is
-small but has nested structures, lists, and quoted-string edge cases.
+**Date**: 2026-05-31
+**Status**: active
 
-**Decision**: Use [Yams](https://github.com/jpsim/Yams) via SwiftPM. It's the de facto
-choice (used by SwiftLint, Vapor), MIT-licensed, single-dep.
+**Context**: Three real choices for YAML parsing in Swift: Yams (LibYAML wrapper — mature), a hand-rolled parser, or shelling out to a YAML CLI. The config schema is small but has nested structures, lists, and quoted-string edge cases.
+
+**Decision**: Use [Yams](https://github.com/jpsim/Yams) via SwiftPM. It's the de facto choice (used by SwiftLint, Vapor), MIT-licensed, single-dep.
 
 **Rejected alternatives**:
 - Hand-rolled — too much YAML edge-case surface area.
@@ -185,165 +139,118 @@ choice (used by SwiftLint, Vapor), MIT-licensed, single-dep.
 
 ---
 
-## SADR-008: Carbon `RegisterEventHotKey` for global hotkey
-**Status**: Accepted
+## SADR-008. Carbon `RegisterEventHotKey` for global hotkey
 
-**Context**: macOS has two paths for global hotkeys: Carbon HotKey API and
-`NSEvent.addGlobalMonitorForEvents`. The latter requires monitoring **every** key
-event in the system — wasteful and triggers false-positive Accessibility prompts.
-Carbon HotKey installs a kernel-level filter and only fires for the configured combo.
+**Date**: 2026-05-31
+**Status**: active
 
-**Decision**: Wrap Carbon's `RegisterEventHotKey` in `Core/HotKey.swift`. It's
-deprecated in name but actively maintained (used by Magnet, Rectangle, etc.).
+**Context**: macOS has two paths for global hotkeys: Carbon HotKey API and `NSEvent.addGlobalMonitorForEvents`. The latter requires monitoring **every** key event in the system — wasteful and triggers false-positive Accessibility prompts. Carbon HotKey installs a kernel-level filter and only fires for the configured combo.
+
+**Decision**: Wrap Carbon's `RegisterEventHotKey` in `Core/HotKey.swift`. It's deprecated in name but actively maintained (used by Magnet, Rectangle, etc.).
 
 **Rejected alternatives**:
-- `NSEvent.addGlobalMonitor*` — no Accessibility benefit, monitors all keys, adds
-  overhead.
+- `NSEvent.addGlobalMonitor*` — no Accessibility benefit, monitors all keys, adds overhead.
 - `MASShortcut` library — wraps Carbon but adds a dep + UI components we don't need.
 
-**Consequence**: A 60-line `HotKey.swift` wrapper. No prompt for "Input Monitoring"
-permission (which `addGlobalMonitor` would trigger).
+**Consequence**: A 60-line `HotKey.swift` wrapper. No prompt for "Input Monitoring" permission (which `addGlobalMonitor` would trigger).
 
 ---
 
-## SADR-009: Use ImageIO + (optional) `libwebp` for compression, not link `sharp` / libvips
-**Status**: Accepted
+## SADR-009. Use ImageIO + (optional) `libwebp` for compression, not link `sharp` / libvips
 
-**Context**: `sharp` (libvips) is the gold standard for fast image processing in
-Node. macOS ships ImageIO, which covers JPEG / PNG / WebP / HEIC encode + decode at
-performance comparable to libvips for typical web image sizes (≤ 4K).
+**Date**: 2026-05-31
+**Status**: active
 
-**Decision**: Compression goes through ImageIO. PNG palette optimization parity
-with sharp's libimagequant is deferred — v1 ships with vanilla PNG. If the
-compression ratio gap proves user-visible, add an optional `libimagequant` binary
-in v2.
+**Context**: `sharp` (libvips) is the gold standard for fast image processing in Node. macOS ships ImageIO, which covers JPEG / PNG / WebP / HEIC encode + decode at performance comparable to libvips for typical web image sizes (≤ 4K).
 
-**Consequence**: No native binary linking, no x86/arm64 fat-lib management. Slightly
-larger PNGs in worst case (~10-20% vs sharp). JPEG/WebP are at parity.
+**Decision**: Compression goes through ImageIO. PNG palette optimization parity with sharp's libimagequant is deferred — v1 ships with vanilla PNG. If the compression ratio gap proves user-visible, add an optional `libimagequant` binary in v2.
+
+**Consequence**: No native binary linking, no x86/arm64 fat-lib management. Slightly larger PNGs in worst case (~10-20% vs sharp). JPEG/WebP are at parity.
 
 ---
 
-## SADR-010: AX-API + lean Apple Events (browser URL only), drop AppleScript
-**Status**: Accepted
+## SADR-010. AX-API + lean Apple Events (browser URL only), drop AppleScript
 
-**Context**: Electron ADR-001 chose AppleScript-via-`osascript` to avoid bundling a
-separate `get-windows` binary (which required its own AX permission). Now we're
-already a single signed binary, so the original constraint disappears.
+**Date**: 2026-05-31
+**Status**: active
 
-**Decision**: Window title + bundle ID via AX (`AXUIElementCopyAttributeValue`).
-**Browser URL** still requires Apple Events because no public AX attribute exposes
-browser tab URLs — so we keep a single compiled `NSAppleScript` per browser, called
-only when the front app is in `enrichApps`.
+**Context**: Electron ADR-001 chose AppleScript-via-`osascript` to avoid bundling a separate `get-windows` binary (which required its own AX permission). Now we're already a single signed binary, so the original constraint disappears.
 
-**Consequence**: Per-poll cost drops from ~50 ms (osascript fork) to ~1 ms (AX) for
-non-browsers, and ~5 ms (compiled NSAppleScript reuse) for browsers. Same
-Accessibility grant. Apple Events permission is requested lazily on first browser
-URL fetch.
+**Decision**: Window title + bundle ID via AX (`AXUIElementCopyAttributeValue`). **Browser URL** still requires Apple Events because no public AX attribute exposes browser tab URLs — so we keep a single compiled `NSAppleScript` per browser, called only when the front app is in `enrichApps`.
+
+**Consequence**: Per-poll cost drops from ~50 ms (osascript fork) to ~1 ms (AX) for non-browsers, and ~5 ms (compiled NSAppleScript reuse) for browsers. Same Accessibility grant. Apple Events permission is requested lazily on first browser URL fetch.
 
 ---
 
-## SADR-011: NSPanel `nonactivatingPanel`, port of Electron ADR-013
-**Status**: Accepted
+## SADR-011. NSPanel `nonactivatingPanel`, port of Electron ADR-013
 
-**Context**: ADR-013 fixed a bug where summoning the palette dragged MainWindow to
-the global foreground because Electron's `BrowserWindow.show()` calls
-`[NSApp activate]`. The Electron fix used `type: 'panel'` (Electron PR #41750).
+**Date**: 2026-05-31
+**Status**: active
 
-**Decision**: Same model in Swift — `NSPanel` subclass with `.nonactivatingPanel`
-style mask, `becomesKeyOnlyIfNeeded = true`, `hidesOnDeactivate = true`. The dismiss
-path never calls `NSApp.hide(nil)`, preserving MainWindow visibility.
+**Context**: ADR-013 fixed a bug where summoning the palette dragged MainWindow to the global foreground because Electron's `BrowserWindow.show()` calls `[NSApp activate]`. The Electron fix used `type: 'panel'` (Electron PR #41750).
 
-**Consequence**: Identical UX to the Electron build's post-ADR-013 state. The latent
-bug from the pre-fix Electron palette is impossible to reintroduce because the
-underlying primitive (NSPanel) is what gives us the property.
+**Decision**: Same model in Swift — `NSPanel` subclass with `.nonactivatingPanel` style mask, `becomesKeyOnlyIfNeeded = true`, `hidesOnDeactivate = true`. The dismiss path never calls `NSApp.hide(nil)`, preserving MainWindow visibility.
+
+**Consequence**: Identical UX to the Electron build's post-ADR-013 state. The latent bug from the pre-fix Electron palette is impossible to reintroduce because the underlying primitive (NSPanel) is what gives us the property.
 
 ---
 
-## SADR-012: Universal binary, drop per-arch DMG split
-**Status**: Accepted
+## SADR-012. Universal binary, drop per-arch DMG split
 
-**Context**: Electron build ships separate `arm64` and `x64` DMGs (Cask uses
-`arch arm:` block). A universal Swift binary is a small added size (~30%) that
-simplifies distribution.
+**Date**: 2026-05-31
+**Status**: active
 
-**Decision**: `ARCHS = arm64 x86_64`, single `Nexus.dmg`. Cask drops the `arch`
-block. Single sha256 to track.
+**Context**: Electron build ships separate `arm64` and `x64` DMGs (Cask uses `arch arm:` block). A universal Swift binary is a small added size (~30%) that simplifies distribution.
 
-**Consequence**: One artifact in the release. The CI matrix shrinks from
-`{arm64, x64}` to a single `macos-latest` job. Bundle size up from ~10 MB to ~13 MB
-(both arches), still 95%+ smaller than Electron.
+**Decision**: `ARCHS = arm64 x86_64`, single `Nexus.dmg`. Cask drops the `arch` block. Single sha256 to track.
+
+**Consequence**: One artifact in the release. The CI matrix shrinks from `{arm64, x64}` to a single `macos-latest` job. Bundle size up from ~10 MB to ~13 MB (both arches), still 95%+ smaller than Electron.
 
 ---
 
-## SADR-013: Drop Dashboard view (Electron `Dashboard.tsx`)
-**Status**: Accepted
+## SADR-013. Drop Dashboard view (Electron `Dashboard.tsx`)
 
-**Context**: The Electron build has a `Dashboard.tsx` (39 lines, 4 emoji
-cards: 🍅 Pomodoro / 🖼️ Uploader / 📝 Notes / ⚙️ Settings). It serves as the
-default landing page of `MainWindow` because the hash router needs *something*
-to show on `#/`. Functionally it's a feature launcher, not a dashboard — there
-is no aggregate today-view data on it.
+**Date**: 2026-06-01
+**Status**: active
 
-**Decision**: Don't port. The Swift main window already has three superior
-entry surfaces:
-- **Sidebar**: always-visible list (Stats / Tracker / Uploader / Settings),
-  zero clicks to switch
+**Context**: The Electron build has a `Dashboard.tsx` (39 lines, 4 emoji cards: 🍅 Pomodoro / 🖼️ Uploader / 📝 Notes / ⚙️ Settings). It serves as the default landing page of `MainWindow` because the hash router needs *something* to show on `#/`. Functionally it's a feature launcher, not a dashboard — there is no aggregate today-view data on it.
+
+**Decision**: Don't port. The Swift main window already has three superior entry surfaces:
+- **Sidebar**: always-visible list (Stats / Tracker / Uploader / Settings), zero clicks to switch
 - **Menu bar popover**: Pomodoro is one click away from anywhere in the OS
-- **Command palette (⌘K)**: directly invokes any registered action without a
-  visit to MainWindow
+- **Command palette (⌘K)**: directly invokes any registered action without a visit to MainWindow
 
-Each of these dominates the Electron Dashboard on at least one axis (latency,
-ubiquity, action depth), and together they fully cover its job.
+Each of these dominates the Electron Dashboard on at least one axis (latency, ubiquity, action depth), and together they fully cover its job.
 
-**Consequence**: First-launch route is `.stats` (already a data-rich view), not
-a launcher screen. If a future "Today" overview is genuinely wanted, it's a new
-sub-view of `StatsView` or a new `MainRoute.today` case — explicitly *not* a
-revival of the Electron Dashboard's launcher pattern.
+**Consequence**: First-launch route is `.stats` (already a data-rich view), not a launcher screen. If a future "Today" overview is genuinely wanted, it's a new sub-view of `StatsView` or a new `MainRoute.today` case — explicitly *not* a revival of the Electron Dashboard's launcher pattern.
 
 ---
 
-## SADR-014: Repo hoist + Electron archival
-**Status**: Accepted
+## SADR-014. Repo hoist + Electron archival
 
-**Context**: During the Electron→Swift migration the Swift sources lived under
-`nexus-swift/` so the two stacks could coexist. Once Electron parity reached
-v1.0.0 and `src/` was no longer being touched, the `nexus-swift/` prefix had no
-remaining purpose: every script, CI workflow, README link, and IDE breadcrumb
-paid an extra path segment for nothing. macOS apps in the wild (Sparkle, GRDB,
-Rectangle, Stats, Ice) keep the project at repo root; the subdirectory was a
-migration scaffold, not a convention.
+**Date**: 2026-06-01
+**Status**: active
+
+**Context**: During the Electron→Swift migration the Swift sources lived under `nexus-swift/` so the two stacks could coexist. Once Electron parity reached v1.0.0 and `src/` was no longer being touched, the `nexus-swift/` prefix had no remaining purpose: every script, CI workflow, README link, and IDE breadcrumb paid an extra path segment for nothing. macOS apps in the wild (Sparkle, GRDB, Rectangle, Stats, Ice) keep the project at repo root; the subdirectory was a migration scaffold, not a convention.
 
 **Decision**: After v1.1.0 ship, two-commit cleanup on a single branch:
 1. **Archive Electron** — `git rm -rf src/ electron-builder.yml electron.vite.config.ts package.json pnpm-lock.yaml tsconfig*.json resources/ build/entitlements.mac.plist scripts/test-*.mjs scripts/install-release.sh`. Tag the prior tip as `legacy/electron` (annotated, points to commit `c73e496` = `release: nexus v0.7.0`) so Electron sources are reachable via `git checkout legacy/electron`.
 2. **Hoist** — `git mv nexus-swift/* .` for `Nexus/`, `scripts/`, `project.yml`, `README.md`. Merge `nexus-swift/.gitignore` into root `.gitignore`. Drop the `REPO_ROOT="$PROJECT_DIR/.."` hop from `scripts/generate-app-icon.sh`. Strip `working-directory: nexus-swift` from `.github/workflows/build.yml` and rewrite the artifact glob `nexus-swift/dist/Nexus-*.dmg` → `dist/Nexus-*.dmg`.
 
-The two-commit split gives git's rename detector a clean signal: commit 2 shows
-~75 100% renames instead of "delete A + add B" pairs, which makes review and
-future blame clean.
+The two-commit split gives git's rename detector a clean signal: commit 2 shows ~75 100% renames instead of "delete A + add B" pairs, which makes review and future blame clean.
 
-**Consequence**: Repo root mirrors what an external contributor expects from a
-macOS Swift project — `Nexus/`, `project.yml`, `scripts/`, `README.md`,
-`.github/`. The `.ea/spec/` (Electron-era top-level) stays in place as a
-historical spec; `.ea/spec/swift/` remains the active spec. The
-`legacy/electron` tag is the single recovery handle for Electron code; nothing
-else points to it.
+**Consequence**: Repo root mirrors what an external contributor expects from a macOS Swift project — `Nexus/`, `project.yml`, `scripts/`, `README.md`, `.github/`. The `.ea/spec/` (Electron-era top-level) stays in place as a historical spec; `.ea/spec/swift/` remains the active spec. The `legacy/electron` tag is the single recovery handle for Electron code; nothing else points to it.
 
 ---
 
-## SADR-015: Adopt standard macOS data layout
-**Status**: Accepted (v1.2.0)
+## SADR-015. Adopt standard macOS data layout
 
-**Context**: Through v1.1.x, all of Nexus's data lived under `~/.ea/nexus/` —
-config, SQLite database, uploader thumbnail cache, and the file-mirrored log.
-The path was inherited from the Electron build, where it doubled as a
-mackup-friendly dotfile location. After cleanup the only remaining argument for
-`~/.ea/nexus/` was inertia: it doesn't match macOS conventions, sandbox-friendly
-APIs (`FileManager.url(for:in:)`) deliberately don't return it, and Time
-Machine's "back up Application Support, skip Caches" heuristic can't apply to a
-flat-by-kind directory.
+**Date**: 2026-06-01
+**Status**: active (v1.2.0)
 
-**Decision**: Use the standard system-furnished locations, all keyed by bundle
-identifier `site.easonsi.nexus`:
+**Context**: Through v1.1.x, all of Nexus's data lived under `~/.ea/nexus/` — config, SQLite database, uploader thumbnail cache, and the file-mirrored log. The path was inherited from the Electron build, where it doubled as a mackup-friendly dotfile location. After cleanup the only remaining argument for `~/.ea/nexus/` was inertia: it doesn't match macOS conventions, sandbox-friendly APIs (`FileManager.url(for:in:)`) deliberately don't return it, and Time Machine's "back up Application Support, skip Caches" heuristic can't apply to a flat-by-kind directory.
+
+**Decision**: Use the standard system-furnished locations, all keyed by bundle identifier `site.easonsi.nexus`:
 
 | Kind | Path | Reasoning |
 |---|---|---|
@@ -352,204 +259,109 @@ identifier `site.easonsi.nexus`:
 | Logs | `~/Library/Logs/site.easonsi.nexus/` | `main.log` + 4 rotated generations — Console.app's "Reports" view picks them up automatically |
 | UI state | `~/Library/Preferences/site.easonsi.nexus.plist` | `NSWindow` frame autosave (already there pre-1.2.0; AppKit owns it) |
 
-`Paths.swift` resolves each via `FileManager.url(for:in:)` and appends the
-bundle id — no hardcoded `~/Library/...` strings. `LegacyMigration.swift`
-(which read the pre-Swift JSON files at app launch) is **deleted**: the
-v1.0/v1.1 import was a one-time event for the early Phase 1 user, and the
-migration to standard paths is not the app's job.
+`Paths.swift` resolves each via `FileManager.url(for:in:)` and appends the bundle id — no hardcoded `~/Library/...` strings. `LegacyMigration.swift` (which read the pre-Swift JSON files at app launch) is **deleted**: the v1.0/v1.1 import was a one-time event for the early Phase 1 user, and the migration to standard paths is not the app's job.
 
 **Consequences**:
 
-- **One-shot external migration**: `scripts/migrate-data-v1.2.0.sh` moves
-  `~/.ea/nexus/{config.json, nexus.db, nexus.db-wal, nexus.db-shm}` to
-  Application Support, archives the rest to `~/.ea/nexus.pre-v1.2.0-bak-<ts>/`,
-  cleans Electron-era residue from `~/Library/Application Support/nexus/` and
-  `~/Library/Logs/nexus/`. Idempotent. Symlinks (e.g. mackup chains pointing at
-  `config.json`) are preserved by `mv`.
-- **Mackup integration breaks**: any `.mackup.cfg` entry like `.ea/nexus/config.yaml`
-  no longer resolves. Re-establishing sync is an explicit user step (update
-  the mackup app config to point at `Library/Application Support/site.easonsi.nexus/config.json`,
-  recreate the symlink). Mackup integration was always a power-user setup, not
-  a default; v1.2.0 deliberately sheds it from the migration script.
-- **Sandbox-future-proof**: the standard locations are exactly the URLs that
-  `NSFileManager` returns inside the sandbox. If we ever ship through the Mac
-  App Store, the on-disk paths simply move under `~/Library/Containers/site.easonsi.nexus/Data/`
-  with the same internal structure — no path-handling code changes needed.
-- **Console.app discovery**: app logs land where macOS surfaces them by
-  default ("Reports" sidebar in Console.app). `log show --predicate 'subsystem == "site.easonsi.nexus"'`
-  also works for OSLog-side queries.
-- **Smaller `Paths.swift`**: down from 14 paths to 8. The dropped entries
-  (`dataFile`, `uploaderFile`, `archiveDir`, `trackerDir`, `archiveFile(year:)`,
-  `trackerFile(date:)`, `legacyWindowStateFile`, `cleanupLegacyFiles()`) were
-  all only used by `LegacyMigration` or referred to legacy file shapes that
-  are now in the database.
+- **One-shot external migration**: `scripts/migrate-data-v1.2.0.sh` moves `~/.ea/nexus/{config.json, nexus.db, nexus.db-wal, nexus.db-shm}` to Application Support, archives the rest to `~/.ea/nexus.pre-v1.2.0-bak-<ts>/`, cleans Electron-era residue from `~/Library/Application Support/nexus/` and `~/Library/Logs/nexus/`. Idempotent. Symlinks (e.g. mackup chains pointing at `config.json`) are preserved by `mv`.
+- **Mackup integration breaks**: any `.mackup.cfg` entry like `.ea/nexus/config.yaml` no longer resolves. Re-establishing sync is an explicit user step (update the mackup app config to point at `Library/Application Support/site.easonsi.nexus/config.json`, recreate the symlink). Mackup integration was always a power-user setup, not a default; v1.2.0 deliberately sheds it from the migration script.
+- **Sandbox-future-proof**: the standard locations are exactly the URLs that `NSFileManager` returns inside the sandbox. If we ever ship through the Mac App Store, the on-disk paths simply move under `~/Library/Containers/site.easonsi.nexus/Data/` with the same internal structure — no path-handling code changes needed.
+- **Console.app discovery**: app logs land where macOS surfaces them by default ("Reports" sidebar in Console.app). `log show --predicate 'subsystem == "site.easonsi.nexus"'` also works for OSLog-side queries.
+- **Smaller `Paths.swift`**: down from 14 paths to 8. The dropped entries (`dataFile`, `uploaderFile`, `archiveDir`, `trackerDir`, `archiveFile(year:)`, `trackerFile(date:)`, `legacyWindowStateFile`, `cleanupLegacyFiles()`) were all only used by `LegacyMigration` or referred to legacy file shapes that are now in the database.
 
 ---
 
-## SADR-016: Sync through a small server, last write wins per record
-**Status**: Accepted (nexus-016 server; client in nexus-017)
+## SADR-016. Sync through a small server, last write wins per record
 
-**Context**: Several Macs run Nexus, and settings, pomodoro data, and tracker
-records should follow the user between them. The owner's other apps (iris,
-forge) already run a TypeScript server with a Postgres `records` table and an
-export feed that intake reads.
+**Date**: 2026-10-27
+**Status**: active (nexus-016 server; client in nexus-017)
 
-**Decision**: `services/server` in this repo, modeled on iris's server: one
-`records (kind, id, rev, …)` table, a global `rev` sequence, HTTP push and
-pull with a cursor, and `/export/*` for other apps. Each row is one record;
-the newer `updatedAt` wins, ties keep the stored copy, and a losing write gets
-the stored record back. Deletes are tombstones. Settings sync whole, one record
-per key, including the uploader's GitHub token. Contract: [`sync.md`](../docs/sync.md).
+**Context**: Several Macs run Nexus, and settings, pomodoro data, and tracker records should follow the user between them. The owner's other apps (iris, forge) already run a TypeScript server with a Postgres `records` table and an export feed that intake reads.
+
+**Decision**: `services/server` in this repo, modeled on iris's server: one `records (kind, id, rev, …)` table, a global `rev` sequence, HTTP push and pull with a cursor, and `/export/*` for other apps. Each row is one record; the newer `updatedAt` wins, ties keep the stored copy, and a losing write gets the stored record back. Deletes are tombstones. Settings sync whole, one record per key, including the uploader's GitHub token. Contract: [`sync.md`](../docs/sync.md).
 
 **Rejected alternatives**:
-- iris's WebSocket hub and base-rev merge — Nexus has no relay calls, and none of
-  its records is a list two Macs append to at once (sessions and tracker rows
-  are written once by the Mac that recorded them), so plain HTTP and
-  last-write-wins are enough.
-- A settings whitelist — every setting is the user's preference; per-Mac
-  exceptions can come later if one turns out to be machine-specific.
+- iris's WebSocket hub and base-rev merge — Nexus has no relay calls, and none of its records is a list two Macs append to at once (sessions and tracker rows are written once by the Mac that recorded them), so plain HTTP and last-write-wins are enough.
+- A settings whitelist — every setting is the user's preference; per-Mac exceptions can come later if one turns out to be machine-specific.
 
 **Consequences**:
-- `tracker_records` needs a UUID `uid` column (autoincrement ids collide across
-  Macs); the client migration adds and backfills it.
-- The GitHub token is stored in plaintext on the server and in its backups.
-  HTTPS protects the wire; settings are never an export kind.
-- A Mac's clock decides which edit wins; clocks skewed by minutes can let an
-  older edit win. Acceptable for one user's settings and catalog edits.
+- `tracker_records` needs a UUID `uid` column (autoincrement ids collide across Macs); the client migration adds and backfills it.
+- The GitHub token is stored in plaintext on the server and in its backups. HTTPS protects the wire; settings are never an export kind.
+- A Mac's clock decides which edit wins; clocks skewed by minutes can let an older edit win. Acceptable for one user's settings and catalog edits.
 
 ---
 
-## SADR-017: GRDB 7, and sync logic in a Linux-testable package
-**Status**: Accepted (nexus-017)
+## SADR-017. GRDB 7, and sync logic in a Linux-testable package
 
-**Context**: The sync client (SADR-016) has enough moving parts (triggers,
-outbox, paging, first contact) that it needs tests, and the owner develops it
-on a Linux devcloud with no Mac. GRDB 6.29 does not link on Linux (Ubuntu's
-SQLite lacks `sqlite3_snapshot_*`); GRDB 7 does.
+**Date**: 2026-10-27
+**Status**: active (nexus-017)
 
-**Decision**: Move the app to GRDB 7 (`project.yml`: `from: 7.0.0`) and put all
-sync logic in `Packages/NexusSync`, a SwiftPM package with GRDB as its only
-dependency and no AppKit/SwiftUI, tested with `swift test` in `swift:6.1-noble`.
-Change capture is SQLite triggers into `sync_outbox`, so the app's repositories
-stay unchanged. Layout and wiring: [`sync.md`](../docs/sync.md#swift-client).
+**Context**: The sync client (SADR-016) has enough moving parts (triggers, outbox, paging, first contact) that it needs tests, and the owner develops it on a Linux devcloud with no Mac. GRDB 6.29 does not link on Linux (Ubuntu's SQLite lacks `sqlite3_snapshot_*`); GRDB 7 does.
+
+**Decision**: Move the app to GRDB 7 (`project.yml`: `from: 7.0.0`) and put all sync logic in `Packages/NexusSync`, a SwiftPM package with GRDB as its only dependency and no AppKit/SwiftUI, tested with `swift test` in `swift:6.1-noble`. Change capture is SQLite triggers into `sync_outbox`, so the app's repositories stay unchanged. Layout and wiring: [`sync.md`](../docs/sync.md#swift-client).
 
 **Rejected alternatives**:
-- Recording changes in each repository method — touches every write path and
-  misses writes made outside them (catalog migration, future features).
-- GRDB's `TransactionObserver` — same coverage as triggers but in-process only,
-  and harder to silence exactly for the duration of an applied pull.
+- Recording changes in each repository method — touches every write path and misses writes made outside them (catalog migration, future features).
+- GRDB's `TransactionObserver` — same coverage as triggers but in-process only, and harder to silence exactly for the duration of an applied pull.
 
 **Consequences**:
-- GRDB 7 needs Xcode 16+ (7.0–7.8 declare tools 6.0, 7.9+ declare 6.1, i.e.
-  Xcode 16.3+). CI moves from `macos-14` (default Xcode 15.x) to `macos-15`
-  (default Xcode 16.4), so SwiftPM resolves the same GRDB 7.11 the package is
-  tested with. The app stays in Swift 5 language mode with `minimal`
-  concurrency checking.
-- GRDB 7 async reads and writes throw `CancellationError` when their Task is
-  cancelled (GRDB 6 ran them to completion). Writes started from a SwiftUI
-  `.task` that goes away are rolled back.
-- `tracker_records` gains `uid`; rows applied from other Macs get fresh local
-  autoincrement ids.
+- GRDB 7 needs Xcode 16+ (7.0–7.8 declare tools 6.0, 7.9+ declare 6.1, i.e. Xcode 16.3+). CI moves from `macos-14` (default Xcode 15.x) to `macos-15` (default Xcode 16.4), so SwiftPM resolves the same GRDB 7.11 the package is tested with. The app stays in Swift 5 language mode with `minimal` concurrency checking.
+- GRDB 7 async reads and writes throw `CancellationError` when their Task is cancelled (GRDB 6 ran them to completion). Writes started from a SwiftUI `.task` that goes away are rolled back.
+- `tracker_records` gains `uid`; rows applied from other Macs get fresh local autoincrement ids.
 
 ---
 
-## SADR-018: Develop on devcloud, build on GitHub Actions, sign with a stable self-signed identity, test through a rolling beta
-**Status**: Accepted (2026-10-30)
+## SADR-018. Develop on devcloud, build on GitHub Actions, sign with a stable self-signed identity, test through a rolling beta
 
-**Context**: Developing on a Mac kept that Mac online for agents, and every
-release was ad-hoc signed, so each Homebrew upgrade was a new signer to macOS:
-the Accessibility grant was lost and the tracker stopped until it was granted
-again. The devcloud host cannot build the app (no Xcode; no KVM, so no macOS VM),
-and AGS sandboxes are Linux only. The repository is public, so GitHub's macOS
-runners are free, and they already built v1.3.0 and v1.3.1.
+**Date**: 2026-10-30
+**Status**: active
 
-**Decision**: The code is written on devcloud (`/data/projects/app/nexus`); the
-Linux-testable parts (`Packages/NexusSync`, `services/server`) are tested there.
-Every push to `main` and every pull request is built on `macos-15` by
-`scripts/build-mac.sh`, launched (`scripts/ci-checks.sh launch`) and its DMG
-mounted (`ci-checks.sh dmg`). CI signs with one self-signed code-signing
-certificate (GitHub secrets `NEXUS_SIGN_P12`, `NEXUS_SIGN_P12_PASSWORD`; the
-original in devcloud `~/.config/nexus/signing/`), so the designated requirement
-is `identifier "site.easonsi.nexus" and certificate leaf = H"836e1c14…"` for
-every build. A push to `main` replaces the `nexus-beta` pre-release and the tap's
-`nexus@beta` cask (version `<short>-beta.<run>`); a Mac on `scripts/beta.sh
-install` upgrades within ten minutes. Tags still publish the stable cask. As in
-iris D008.
+**Context**: Developing on a Mac kept that Mac online for agents, and every release was ad-hoc signed, so each Homebrew upgrade was a new signer to macOS: the Accessibility grant was lost and the tracker stopped until it was granted again. The devcloud host cannot build the app (no Xcode; no KVM, so no macOS VM), and AGS sandboxes are Linux only. The repository is public, so GitHub's macOS runners are free, and they already built v1.3.0 and v1.3.1.
+
+**Decision**: The code is written on devcloud (`/data/projects/app/nexus`); the Linux-testable parts (`Packages/NexusSync`, `services/server`) are tested there. Every push to `main` and every pull request is built on `macos-15` by `scripts/build-mac.sh`, launched (`scripts/ci-checks.sh launch`) and its DMG mounted (`ci-checks.sh dmg`). CI signs with one self-signed code-signing certificate (GitHub secrets `NEXUS_SIGN_P12`, `NEXUS_SIGN_P12_PASSWORD`; the original in devcloud `~/.config/nexus/signing/`), so the designated requirement is `identifier "site.easonsi.nexus" and certificate leaf = H"836e1c14…"` for every build. A push to `main` replaces the `nexus-beta` pre-release and the tap's `nexus@beta` cask (version `<short>-beta.<run>`); a Mac on `scripts/beta.sh install` upgrades within ten minutes. Tags still publish the stable cask. As in iris D008.
 
 **Rejected alternatives**:
-- A macOS VM on devcloud — no hardware virtualization there, and Apple's license
-  allows macOS VMs only on Apple hardware.
+- A macOS VM on devcloud — no hardware virtualization there, and Apple's license allows macOS VMs only on Apple hardware.
 - Cloud Macs (EC2 mac) — dedicated hosts billed per day for an occasional build.
-- An Apple Developer ID and notarization (SADR-006) — needs a paid account; a
-  self-signed identity is enough to keep TCC grants, and the cask's quarantine
-  strip already covers Gatekeeper.
+- An Apple Developer ID and notarization (SADR-006) — needs a paid account; a self-signed identity is enough to keep TCC grants, and the cask's quarantine strip already covers Gatekeeper.
 
 **Consequences**:
-- One more prompt per Mac: the first signed build is a new signer after the
-  ad-hoc ones, so Accessibility is granted once more; later upgrades keep it.
-- Losing the certificate costs the same one-time re-grant; rotate it only on
-  purpose. `CFBundleVersion` is the CI run number (`BUILD_NUMBER`), shown in the
-  launch banner.
-- An agent sees build results only through CI (`gh run watch`, `gh run view
-  --log-failed`), a few minutes per round; UI behavior is still judged on a Mac
-  running the beta.
+- One more prompt per Mac: the first signed build is a new signer after the ad-hoc ones, so Accessibility is granted once more; later upgrades keep it.
+- Losing the certificate costs the same one-time re-grant; rotate it only on purpose. `CFBundleVersion` is the CI run number (`BUILD_NUMBER`), shown in the launch banner.
+- An agent sees build results only through CI (`gh run watch`, `gh run view --log-failed`), a few minutes per round; UI behavior is still judged on a Mac running the beta.
 
-## SADR-019: Users on the server, with the key as the identity
-**Status**: Accepted (2026-10-30)
+## SADR-019. Users on the server, with the key as the identity
 
-**Context**: The server held one key and one set of records. If nexus is opened
-to other people, every record needs an owner, and adding that later means
-migrating a table that only grows.
+**Date**: 2026-10-30
+**Status**: active
 
-**Decision**: The server has `users` and `keys`; every record has a `user_id`,
-and every route is scoped to the user of the key it was called with. A key is
-stored as its sha256, as write or read. The user `owner` holds `NEXUS_KEY` and
-`NEXUS_READ_KEY` (re-registered from the environment on every start) and every
-record from before. Other users and keys come from `npm run admin`. No sign-up,
-login, sessions, or per-device keys yet; the Mac app and sonar are unchanged.
+**Context**: The server held one key and one set of records. If nexus is opened to other people, every record needs an owner, and adding that later means migrating a table that only grows.
+
+**Decision**: The server has `users` and `keys`; every record has a `user_id`, and every route is scoped to the user of the key it was called with. A key is stored as its sha256, as write or read. The user `owner` holds `NEXUS_KEY` and `NEXUS_READ_KEY` (re-registered from the environment on every start) and every record from before. Other users and keys come from `npm run admin`. No sign-up, login, sessions, or per-device keys yet; the Mac app and sonar are unchanged.
 
 **Consequences**:
 - The rev sequence stays global (one write lock), so a user's revs have gaps.
-- The web app's `/login` (roadmap round 3) signs in with a key and finds the
-  user from it; accounts with passwords or OAuth come only when someone else
-  uses nexus.
-- Window titles and URLs keep syncing as they are: each user's data is behind
-  their own key (roadmap open question 2, decided the same day).
+- The web app's `/login` (roadmap round 3) signs in with a key and finds the user from it; accounts with passwords or OAuth come only when someone else uses nexus.
+- Window titles and URLs keep syncing as they are: each user's data is behind their own key (roadmap open question 2, decided the same day).
 
 ---
 
-## SADR-020: The server summarizes; the CLI and the web app read it; settings live in nexus.db
+## SADR-020. The server summarizes; the CLI and the web app read it; settings live in nexus.db
 
-**Status**: Accepted (2026-10-31)
+**Date**: 2026-10-31
+**Status**: active
 
-**Context**: Six months of tracker data (~100k rows) sat unused: nothing read it,
-intake copied every raw row, and the numbers were wrong (sleep and the lock screen
-counted as `loginwindow`, a VS Code profile name taken for the project). Settings
-had two homes, `config.json` (Mackup-managed, watched) and the synced `setting`
-records, which could disagree. The user wanted to see and use the data, keep intake
-one-way like iris, and have a CLI that is not a host-oriented tool like Paseo.
+**Context**: Six months of tracker data (~100k rows) sat unused: nothing read it, intake copied every raw row, and the numbers were wrong (sleep and the lock screen counted as `loginwindow`, a VS Code profile name taken for the project). Settings had two homes, `config.json` (Mackup-managed, watched) and the synced `setting` records, which could disagree. The user wanted to see and use the data, keep intake one-way like iris, and have a CLI that is not a host-oriented tool like Paseo.
 
 **Decision**:
-- Settings live in `nexus.db` (`settings` table, one row per leaf). `config.json`
-  is imported once and renamed `config.json.imported`; there is no file to edit or
-  watch. Sync is the way settings reach other Macs.
-- The server cleans tracker rows, sorts them into categories (rules: defaults in
-  code, the user's overrides in a server table), and stores one `day_summary` per
-  local day as a server-written record. Summaries rebuild after pushes and on start;
-  they are exported but never synced to the Macs.
-- intake's `sync-nexus` takes `day_summary` (and the pomodoro kinds) instead of raw
-  tracker rows.
-- Readers go through the server only: the `nexus` CLI (`cli/`, npm
-  `@lightblues/nexus`) and a read-only web app at `/app` with key login and
-  sessions. Edits from an agent go through the CLI (`config set` pushes a setting
-  record as device `cli`; `categories set`).
+- Settings live in `nexus.db` (`settings` table, one row per leaf). `config.json` is imported once and renamed `config.json.imported`; there is no file to edit or watch. Sync is the way settings reach other Macs.
+- The server cleans tracker rows, sorts them into categories (rules: defaults in code, the user's overrides in a server table), and stores one `day_summary` per local day as a server-written record. Summaries rebuild after pushes and on start; they are exported but never synced to the Macs.
+- intake's `sync-nexus` takes `day_summary` (and the pomodoro kinds) instead of raw tracker rows.
+- Readers go through the server only: the `nexus` CLI (`cli/`, npm `@lightblues/nexus`) and a read-only web app at `/app` with key login and sessions. Edits from an agent go through the CLI (`config set` pushes a setting record as device `cli`; `categories set`).
 
 **Consequences**:
-- Category rules are not a synced setting: the Mac app's `AppConfig` would drop an
-  unknown key and push its deletion.
-- Old rows are fixed at read time (lock screen dropped, one-hour cap, editor titles
-  reparsed), so the stored data stays as pushed; `SUMMARY_VERSION` rebuilds every
-  summary when the rules change.
+- Category rules are not a synced setting: the Mac app's `AppConfig` would drop an unknown key and push its deletion.
+- Old rows are fixed at read time (lock screen dropped, one-hour cap, editor titles reparsed), so the stored data stays as pushed; `SUMMARY_VERSION` rebuilds every summary when the rules change.
 - The ~100k `tracker_record` rows intake already copied stay in its `raw`, frozen.
 - Mackup should stop managing `config.json`.
 
@@ -557,7 +369,4 @@ one-way like iris, and have a CLI that is not a host-oriented tool like Paseo.
 
 ## See also
 
-[`pitfalls.md`](../docs/pitfalls.md) — postmortem of traps the *implementations* of these
-decisions hit. Each pitfall entry is keyed to the decision (or omission) that
-caused it; if you adopt one of these SADRs in a new project, read the
-corresponding pitfall first.
+[`pitfalls.md`](../docs/pitfalls.md) — postmortem of traps the *implementations* of these decisions hit. Each pitfall entry is keyed to the decision (or omission) that caused it; if you adopt one of these SADRs in a new project, read the corresponding pitfall first.

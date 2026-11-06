@@ -2,8 +2,7 @@
 
 macOS menu bar toolkit — Pomodoro timer, image uploader, time tracker, command palette.
 
-Native AppKit + SwiftUI single-binary app. The Electron implementation is
-archived at the `legacy/electron` git tag.
+Native AppKit + SwiftUI single-binary app. The Electron implementation is archived at the `legacy/electron` git tag.
 
 ## Quick Reference
 - **Install**: `brew install --cask lightblues/tap/nexus`
@@ -35,3 +34,13 @@ archived at the `legacy/electron` git tag.
 - Commit finished work yourself once its checks pass (build and tests as relevant), one commit per logical change in the repository's commit style, then push `main`. No separate review step is needed.
 - Forge issues: `.ea/issues/` is synced by the forge server and is not committed.
 - Only use `gh` CLI tools after user approval
+
+<!-- forge:start -->
+## forge
+
+This repository tracks work as forge issues in `.ea/issues/` (`forge ls`); settings in `.ea/forge.yaml`. Before writing, dispatching, executing, or closing an issue, read the `forge` skill (`forge setup` installs it).
+
+- Dispatched issue agents go to this checkout's `forge` Paseo workspace, never the workspace the user works in; archive them once their issue is done.
+- Commit and push only as `delivery` says. Never create branches.
+- `.ea/docs/` describes the code as it is now; update it in the same commit as the change.
+<!-- forge:end -->
