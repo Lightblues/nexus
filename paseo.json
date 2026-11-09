@@ -1,0 +1,16 @@
+{
+  "worktree": {
+    "setup": [
+      "cd services/server && npm ci --no-audit --no-fund",
+      "cd cli && npm ci --no-audit --no-fund"
+    ]
+  },
+  "scripts": {
+    "test": {
+      "command": "(cd services/server && npm test) && (cd cli && npm test)"
+    },
+    "typecheck": {
+      "command": "cd cli && npm run typecheck"
+    }
+  }
+}
