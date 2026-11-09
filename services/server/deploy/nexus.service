@@ -5,7 +5,8 @@ After=network.target docker.service
 [Service]
 Type=simple
 WorkingDirectory=/data/projects/app/nexus/services/server
-EnvironmentFile=/data/projects/app/nexus/services/server/.env
+# Rendered from the secrets store: secrets render env services/nexus.env /etc/nexus/env
+EnvironmentFile=/etc/nexus/env
 ExecStart=/usr/local/bin/node src/main.ts
 Restart=always
 RestartSec=3
