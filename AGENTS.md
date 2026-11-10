@@ -16,6 +16,13 @@ Native AppKit + SwiftUI single-binary app. The Electron implementation is archiv
 - **Data**: `~/Library/Application Support/site.easonsi.nexus/nexus.db` (records and settings, no config file) and `sync.json`; `~/Library/Caches/...` (thumbnails); `~/Library/Logs/...` (main.log). See SADR-015.
 - **Docs** (shared `.ea/` layout, forge-run `references/ea-layout.md`): `.ea/docs/README.md` is the index of what the code does now; `.ea/roadmap.md` what comes next; `.ea/log/decisions.md` the SADRs (append-only); `.ea/log/YYYY-MM-DD-*.md` discussions and incidents. The Electron app is at the `legacy/electron` git tag. A behavior or contract change updates `.ea/docs/` in the same commit.
 
+## Commands
+- **Test**: `cd services/server && npm test` (PGlite); `cd cli && npm test`; Swift app: `./scripts/ci-checks.sh unit` on a Mac
+- **Typecheck**: `cd services/server && npx tsc -p .`; `cd cli && npm run typecheck`
+- **Build**: `./scripts/build-mac.sh` (Mac only); `cd cli && npm run bundle`
+- **Deploy (server)**: commit, then `sudo systemctl restart nexus` and `curl -s https://nexus.easonsi.site/health`. Keys: `printf %s "$V" | secrets set services/nexus.env KEY`, `secrets render env services/nexus.env /etc/nexus/env`, restart. The unit reads `/etc/nexus/env`; no production `.env` in the checkout
+- **Admin**: `cd services/server && npm run admin -- users` (reads `/etc/nexus/env` if present)
+
 ## Coding Style
 - Compact and type-hinted
 - Minimal docstrings (only for public methods with non-obvious logic)

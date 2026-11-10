@@ -45,7 +45,7 @@ It ships in the npm package.
 cd cli && npm install
 npm test            # boots the real server on PGlite (services/server test helpers) and runs every command
 npm run typecheck
-node src/main.ts today   # from the checkout (Node 22.18+)
+node src/main.ts today   # from the checkout (Node 24)
 ```
 
 `npm pack` bundles `src/` into `dist/nexus.js` with esbuild (no runtime dependencies). Published as
