@@ -4,7 +4,7 @@ import Foundation
 /// Reads memory state from the kernel. Not thread-safe: call from one serial queue.
 /// Per-process figures come from `proc_pid_rusage`, which macOS allows only for this
 /// user's processes unless the caller is root; other users' processes are skipped.
-final class MemorySampler {
+final class MemorySampler: @unchecked Sendable {   // confined to MemoryWatchService.queue
     private var lastCPU: [Int32: UInt64] = [:]   // pid → user+system ns
     private var lastAt: UInt64 = 0               // mach_absolute_time of the previous sample
     private let timebase: mach_timebase_info_data_t = {
