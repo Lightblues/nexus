@@ -367,6 +367,26 @@ The two-commit split gives git's rename detector a clean signal: commit 2 shows 
 
 ---
 
+## SADR-021. Memory watch: inform only, events in baton's format
+
+**Date**: 2026-11-11
+**Status**: active
+
+**Context**: tx-mbp-m5pro ran out of memory twice on 2026-11-11 (Chrome restoring 450+ tabs; CGPDFService growing from 25 MB to 21 GB in minutes, then 39 GB), and nothing said which process was at fault until someone ran `top -o mem`. baton now monitors every Mac over ssh at minute resolution and only while the Mac is reachable (baton decision B035, baton `.ea/log/2026-11-11-mac-memory.md`). A native app can see the pressure the moment it rises, attribute it per process, and buffer the episode while the Mac is away.
+
+**Decision**:
+- nexus watches memory pressure with a dispatch source and, while it is raised, samples per-process `phys_footprint` every 10 s (`.ea/docs/memory.md`).
+- The notification only informs: the top apps and "Open Activity Monitor". nexus never quits, kills or signals a process; that stays with Activity Monitor and Mole.
+- The event file is baton's format at baton's path (`~/.baton/machine-events/`); baton owns the contract and nexus conforms. It is optional on both sides: baton reads nothing when the file is missing, and nexus writes it without baton installed or reachable. No network for this feature.
+- Process names only (the executable and its `.app`), never arguments or paths.
+
+**Consequences**:
+- A change to the event format starts in baton's `machines.md`; nexus follows and bumps nothing of its own.
+- Other users' processes (root daemons) are not attributed: `proc_pid_rusage` needs privileges the app does not have, and asking for them is not worth it for a user-run culprit.
+- Registry edge: nexus uses baton (via: data).
+
+---
+
 ## See also
 
 [`pitfalls.md`](../docs/pitfalls.md) — postmortem of traps the *implementations* of these decisions hit. Each pitfall entry is keyed to the decision (or omission) that caused it; if you adopt one of these SADRs in a new project, read the corresponding pitfall first.

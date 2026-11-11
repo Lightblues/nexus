@@ -18,6 +18,7 @@ enum Log {
     static let app      = AppLogger(category: "app")
     static let config   = AppLogger(category: "config")
     static let sync     = AppLogger(category: "sync")
+    static let memory   = AppLogger(category: "memory")
 
     /// Write a one-line "session start" banner. Called from AppDelegate at
     /// `applicationDidFinishLaunching`. Goes only to the file sink (OSLog

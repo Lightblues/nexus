@@ -37,6 +37,7 @@ Nexus/
 │   ├── Pomodoro/   PomodoroService (state machine), PomodoroRepository, commands, popover and edit views
 │   ├── Stats/      pomodoro stats and activity calendar
 │   ├── Tracker/    TrackerService (poll, merge), ActiveAppProbe (AX), ContextEnricher, IdleDetector, TrackerRepository, views
+│   ├── Memory/     MemoryWatchService (pressure source, 10 s samples), MemorySampler (proc_pid_rusage), NotifyGate, MachineEventLog
 │   ├── Uploader/   UploaderService, ImageCompressor (ImageIO), GitHubUploader, status-item drop view, views
 │   ├── Palette/    PaletteController, PalettePanel (NSPanel), PaletteSearch, PaletteView
 │   ├── Settings/   one form per tab, Sync tab
@@ -56,7 +57,7 @@ AppDelegate.applicationDidFinishLaunching
   AppEnvironment.bootstrap()
     attach main window and palette   synchronous, before any await
     config.bootstrap()               settings from nexus.db (imports a legacy config.json once)
-    pomodoro, tracker, uploader bootstrap
+    pomodoro, tracker, uploader, memory watch bootstrap
     register commands, install nexus:// handler and the palette hotkey
     sync.start()
 ```
@@ -71,6 +72,7 @@ follow it), resolved through `FileManager` (SADR-015):
 | User data | `~/Library/Application Support/site.easonsi.nexus/` | `nexus.db` (+ `-wal`, `-shm`): records and the `settings` table; `sync.json` (this Mac's sync connection, mode 0600) |
 | Regenerable | `~/Library/Caches/site.easonsi.nexus/` | `uploader-thumbnails/` |
 | Logs | `~/Library/Logs/site.easonsi.nexus/` | `main.log` + 4 rotated generations; `beta-update.log` on beta Macs |
+| baton events | `~/.baton/machine-events/` | memory-pressure episodes as JSONL, in baton's format, 7 days (`memory.md`) |
 | UI state | `~/Library/Preferences/site.easonsi.nexus.plist` | window frame autosave |
 
 Settings are rows (`settings`: dotted key → JSON), the same keys sync uses; there is no

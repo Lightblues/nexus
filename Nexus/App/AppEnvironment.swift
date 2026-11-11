@@ -15,6 +15,7 @@ final class AppEnvironment: ObservableObject {
     let tracker: TrackerService
     let uploaderRepository: UploaderRepository
     let uploader: UploaderService
+    let memory: MemoryWatchService
     let notifier: NotificationService
     let mainWindow: MainWindowController
     let palette: PaletteController
@@ -42,6 +43,7 @@ final class AppEnvironment: ObservableObject {
         self.pomodoro = PomodoroService(repository: pomodoroRepository, config: config, notifier: notifier)
         self.tracker = TrackerService(repository: trackerRepository, config: config, notifier: notifier)
         self.uploader = UploaderService(repository: uploaderRepository, config: config)
+        self.memory = MemoryWatchService(config: config, notifier: notifier)
         self.mainWindow = MainWindowController()
         self.palette = PaletteController()
         self.sync = SyncCoordinator(database: database, config: config) {
@@ -70,6 +72,7 @@ final class AppEnvironment: ObservableObject {
         await trackerRepository.bootstrap()
         await tracker.bootstrap()
         await uploader.bootstrap()
+        memory.bootstrap()
 
         // Register palette + URL-scheme commands. Order doesn't matter; each
         // call is idempotent (registry replaces by id).
@@ -111,6 +114,7 @@ final class AppEnvironment: ObservableObject {
     func shutdown() async {
         // SQLite WAL is already durable on each commit; nothing to flush.
         await tracker.shutdown()
+        memory.shutdown()
         Log.app.info("Shutdown complete")
     }
 }

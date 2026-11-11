@@ -11,6 +11,7 @@ struct AppConfig: Codable, Equatable {
     var tracker: TrackerConfig = .init()
     var hotkey: HotkeyConfig = .init()
     var uploader: UploaderConfig = .init()
+    var memory: MemoryConfig = .init()
 
     init() {}
 
@@ -21,6 +22,7 @@ struct AppConfig: Codable, Equatable {
         tracker  = (try? c.decode(TrackerConfig.self, forKey: .tracker)) ?? .init()
         hotkey   = (try? c.decode(HotkeyConfig.self, forKey: .hotkey)) ?? .init()
         uploader = (try? c.decode(UploaderConfig.self, forKey: .uploader)) ?? .init()
+        memory   = (try? c.decode(MemoryConfig.self, forKey: .memory)) ?? .init()
     }
 
     /// Rewrites values that were defaults in an older version to today's defaults.
@@ -163,5 +165,21 @@ struct CompressConfig: Codable, Equatable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         quality = (try? c.decode(Int.self, forKey: .quality)) ?? 80
         defaultFormat = (try? c.decode(String.self, forKey: .defaultFormat)) ?? "auto"
+    }
+}
+
+/// Memory watch (SADR-021). `notifyLevel` is `warn` or `critical`.
+struct MemoryConfig: Codable, Equatable {
+    var enabled: Bool = true
+    var notifyLevel: MemoryLevel = .warn
+    var writeEvents: Bool = true
+
+    init() {}
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        enabled = (try? c.decode(Bool.self, forKey: .enabled)) ?? true
+        let level = (try? c.decode(MemoryLevel.self, forKey: .notifyLevel)) ?? .warn
+        notifyLevel = level == .normal ? .warn : level
+        writeEvents = (try? c.decode(Bool.self, forKey: .writeEvents)) ?? true
     }
 }

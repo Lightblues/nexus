@@ -11,13 +11,14 @@ struct SettingsView: View {
     @EnvironmentObject var config: ConfigService
 
     enum Tab: String, CaseIterable, Identifiable {
-        case pomodoro, tracker, uploader, hotkey, sync
+        case pomodoro, tracker, uploader, memory, hotkey, sync
         var id: String { rawValue }
         var title: String {
             switch self {
             case .pomodoro: return "Pomodoro"
             case .tracker:  return "Tracker"
             case .uploader: return "Uploader"
+            case .memory:   return "Memory"
             case .hotkey:   return "Hotkey"
             case .sync:     return "Sync"
             }
@@ -27,6 +28,7 @@ struct SettingsView: View {
             case .pomodoro: return "timer"
             case .tracker:  return "clock"
             case .uploader: return "arrow.up.circle"
+            case .memory:   return "memorychip"
             case .hotkey:   return "keyboard"
             case .sync:     return "arrow.triangle.2.circlepath"
             }
@@ -148,6 +150,7 @@ struct SettingsView: View {
         case .pomodoro: PomodoroSettingsForm(draft: $draft)
         case .tracker:  TrackerSettingsForm(draft: $draft)
         case .uploader: UploaderSettingsForm(draft: $draft)
+        case .memory:   MemorySettingsForm(draft: $draft)
         case .hotkey:   HotkeySettingsForm(draft: $draft)
         case .sync:     SyncSettingsForm()
         }
