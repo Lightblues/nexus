@@ -40,6 +40,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ = group.wait(timeout: .now() + .seconds(2))
     }
 
+    /// Opening Nexus again while it runs (Raycast, Spotlight, Finder, `open -a`) shows the main window;
+    /// as an `LSUIElement` app it otherwise has nothing to bring forward.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        environment.mainWindow.show()
+        return true
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         // Menu bar app — never terminate just because windows closed.
         false

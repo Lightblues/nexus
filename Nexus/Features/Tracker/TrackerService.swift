@@ -32,6 +32,8 @@ final class TrackerService: ObservableObject {
     private var promptedAccessibility = false
     /// Notifies once per launch when the tracker is still waiting for Accessibility, so a lost grant cannot go unnoticed for months.
     private var waitingNoticeTask: Task<Void, Never>?
+    /// The "not tracking" notice is withdrawn once Accessibility is granted.
+    private static let waitingNoticeID = "tracker.waitingForPermission"
     private let notifier: NotificationService?
 
     /// Frontmost while the screen is locked or the screen saver runs; never recorded as activity.
@@ -64,6 +66,7 @@ final class TrackerService: ObservableObject {
     private func applyConfig(_ cfg: TrackerConfig) {
         if !cfg.enabled {
             waitingNoticeTask?.cancel(); waitingNoticeTask = nil
+            notifier?.remove(identifier: Self.waitingNoticeID)
             stopPolling()
             status = .stopped
             Log.tracker.info("disabled by config")
@@ -80,13 +83,15 @@ final class TrackerService: ObservableObject {
                     try? await Task.sleep(for: .seconds(600))
                     guard !Task.isCancelled, let self, self.status == .waitingForPermission else { return }
                     self.notifier?.notify(title: "Nexus is not tracking time",
-                                          body: "Accessibility access is off. Grant it in System Settings → Privacy & Security → Accessibility.")
+                                          body: "Accessibility access is off. Grant it in System Settings → Privacy & Security → Accessibility.",
+                                          identifier: Self.waitingNoticeID)
                 }
             }
             schedulePermissionRecheck()
             return
         }
         waitingNoticeTask?.cancel(); waitingNoticeTask = nil
+        notifier?.remove(identifier: Self.waitingNoticeID)
         startPolling(interval: max(1, cfg.pollInterval))
     }
 

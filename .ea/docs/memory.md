@@ -26,7 +26,7 @@ Only names leave the sampler. `proc_pidpath` is read to derive two names and the
 
 ## Notification
 
-Title `Memory pressure warning` or `Memory pressure critical`; body the top 3 apps by summed footprint (`CGPDFService 21 GB · Google Chrome 9.0 GB · Code 5.0 GB`); one action, "Open Activity Monitor" (a click on the body does the same). Sound only at critical. `NotifyGate` allows one notification per 15 min, except when the level rises to critical (once per episode) or an app becomes the top one that has not been named in the last 15 min. The 15-min window spans episodes.
+Title `Memory pressure warning` or `Memory pressure critical`; body the top 3 apps by summed footprint (`CGPDFService 21 GB · Google Chrome 9.0 GB · Code 5.0 GB`); one action, "Open Activity Monitor" (a click on the body does the same). Sound only at critical. `NotifyGate` allows one notification per 15 min, except when the level rises to critical (once per episode) or an app becomes the top one that has not been named in the last 15 min. The 15-min window spans episodes. All of them share one id, so a newer one replaces the older, and the return to normal withdraws it.
 
 ## Events for baton
 

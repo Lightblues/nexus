@@ -59,6 +59,7 @@ targets:
         CFBundlePackageType: APPL
         LSApplicationCategoryType: public.app-category.utilities
         LSUIElement: true
+        NSUserNotificationAlertStyle: alert
         LSMinimumSystemVersion: "13.0"
         NSHumanReadableCopyright: "© 2026 Eason"
         NSAccessibilityUsageDescription: "Nexus reads the active window title to track time spent per app and per project. Required for the Time Tracker feature."

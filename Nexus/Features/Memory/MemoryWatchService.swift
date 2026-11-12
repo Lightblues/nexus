@@ -96,7 +96,8 @@ final class MemoryWatchService: ObservableObject {
         }
         if gate.shouldNotify(level: snap.level, topApp: MemoryReport.topApps(snap.processes, 1).first?.app, now: Date()) {
             notifier.notify(title: MemoryReport.title(snap.level), body: MemoryReport.body(snap.processes),
-                            sound: snap.level == .critical, category: NotificationService.memoryCategory)
+                            sound: snap.level == .critical, category: NotificationService.memoryCategory,
+                            identifier: NotificationService.memoryID)
         }
     }
 
@@ -104,6 +105,7 @@ final class MemoryWatchService: ObservableObject {
         episode = false
         timer?.invalidate(); timer = nil
         gate.reset(to: .normal)
+        notifier.remove(identifier: NotificationService.memoryID)
         write(.pressure_end, snap)
         queue.async { [sampler] in sampler.reset() }
         Log.memory.info("pressure back to normal")

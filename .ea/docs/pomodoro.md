@@ -156,9 +156,22 @@ version 1:1 — the registry shape is the same.
 
 ## Notifications
 
-`UNUserNotificationCenter` with a single category `pomodoro.completion`. Body says
-"Focus complete — break starts in N seconds" or "Break done — back to work?" depending
-on kind. Sound: default. No actions in v1 (Electron version has none either).
+One completion notification at a time, under the fixed id `pomodoro.completion`: a new one
+replaces the old, and it is withdrawn as soon as the state leaves `.finished` (a session
+starts from anywhere, or Exit). So the Notification Center never holds a stale Pomodoro.
+
+- Focus complete: "Time for a break." With `autoStartBreak` the break starts after
+  `autoStartBreakDelay` seconds and the notification goes away with it.
+- Break complete: "Back to work? Click to start focus." Category `pomodoro.breakDone` with one
+  action, "Start Focus"; the action or a click on the body starts a focus session without
+  bringing Nexus forward. It stays on screen until clicked or until a session starts another way,
+  because nothing restarts the timer for you after a break.
+
+Staying on screen needs the Alerts style: `Info.plist` declares `NSUserNotificationAlertStyle =
+alert`, which macOS uses only when it first registers the app. A Mac that already had Nexus
+keeps its choice; set System Settings → Notifications → Nexus → Alerts once. The style applies to
+all of Nexus's notifications; each of them withdraws itself when its condition is over (memory:
+the return to normal), so alerts do not pile up.
 
 `confettiOnComplete` (config) fires a Raycast confetti deeplink the same way the
 Electron build does — open `raycast://confetti`.

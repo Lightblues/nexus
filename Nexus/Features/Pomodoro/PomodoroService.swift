@@ -6,7 +6,10 @@ import Combine
 /// Owns the only timer; views observe @Published state.
 @MainActor
 final class PomodoroService: ObservableObject {
-    @Published private(set) var state: PomodoroState = .idle
+    /// The completion notification describes `.finished`; any other state withdraws it.
+    @Published private(set) var state: PomodoroState = .idle {
+        didSet { if case .finished = state {} else if case .finished = oldValue { notifier.remove(identifier: NotificationService.pomodoroID) } }
+    }
     @Published private(set) var remaining: TimeInterval = 0
     @Published var draftMetadata: SessionMetadata = .empty   // persisted on next start
     /// Shows the status-item popover without activating the app; set by `AppDelegate`, which owns it.
@@ -25,6 +28,13 @@ final class PomodoroService: ObservableObject {
         self.repository = repository
         self.config = config
         self.notifier = notifier
+        notifier.onStartFocus = { [weak self] in
+            guard let self else { return }
+            switch self.state {
+            case .idle, .finished: self.start(kind: .work)
+            default: break  // already running or paused: the click only dismisses
+            }
+        }
     }
 
     func attach(statusItem: NSStatusItem) {
@@ -154,9 +164,13 @@ final class PomodoroService: ObservableObject {
         let endedAt = startedAt.addingTimeInterval(total)
         await persistSession(kind: kind, startedAt: startedAt, endedAt: endedAt, completedFully: true)
 
-        let title = kind == .work ? "Focus complete" : "Break complete"
-        let body  = kind == .work ? "Time for a break." : "Back to work?"
-        notifier.notify(title: title, body: body)
+        if kind == .work {
+            notifier.notify(title: "Focus complete", body: "Time for a break.", identifier: NotificationService.pomodoroID)
+        } else {
+            // Stays (alert style) until clicked or until a session starts some other way.
+            notifier.notify(title: "Break complete", body: "Back to work? Click to start focus.",
+                            category: NotificationService.breakDoneCategory, identifier: NotificationService.pomodoroID)
+        }
 
         if config.config.pomodoro.confettiOnComplete && kind == .work {
             if let url = URL(string: "raycast://confetti") {

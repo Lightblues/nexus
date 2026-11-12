@@ -37,6 +37,8 @@
 	<string>13.0</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>NSUserNotificationAlertStyle</key>
+	<string>alert</string>
 	<key>NSAccessibilityUsageDescription</key>
 	<string>Nexus reads the active window title to track time spent per app and per project. Required for the Time Tracker feature.</string>
 	<key>NSAppleEventsUsageDescription</key>

@@ -12,7 +12,9 @@ Nexus.app (each Mac)                 services/server (devcloud)               re
 ```
 
 The app is one process: status item, popover, main window, palette panel, and the
-background services.
+background services. It is an `LSUIElement` app (no Dock icon) that becomes `.regular` while
+the main window is open. Opening Nexus while it runs (Raycast, Spotlight, Finder, `open -a
+Nexus`) reaches `applicationShouldHandleReopen`, which shows the main window.
 
 - **Platform**: macOS 13.0+. SwiftUI for content, AppKit where SwiftUI cannot express it
   (NSPanel palette, NSStatusItem with a drop target, NSPopover). No `MenuBarExtra`: it
