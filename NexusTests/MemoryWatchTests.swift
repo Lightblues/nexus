@@ -36,7 +36,10 @@ final class MemoryWatchTests: XCTestCase {
             p(4, "Code", 5 * gb),
             p(5, "Finder", gb / 4),
         ]
-        XCTAssertEqual(MemoryReport.body(procs), "CGPDFService 21 GB · Google Chrome 9.0 GB · Code 5.0 GB")
+        XCTAssertEqual(MemoryReport.body(MemoryReport.topApps(procs)), "CGPDFService 21 GB · Google Chrome 9.0 GB · Code 5.0 GB")
+        // Many small helpers outrank one big process once summed (59 Chrome processes, none in the top 8).
+        let many = (0..<40).map { p(Int32(100 + $0), "Google Chrome Helper (Renderer)", gb / 5, app: "Google Chrome") } + [p(9, "Code", 2 * gb)]
+        XCTAssertEqual(MemoryReport.topApps(many, 1).first?.app, "Google Chrome")
         XCTAssertEqual(MemoryReport.bytes(850 * 1_048_576), "850 MB")
         XCTAssertEqual(MemoryReport.title(.critical), "Memory pressure critical")
     }

@@ -52,7 +52,10 @@ struct SystemMemory: Equatable {
 struct MemorySnapshot {
     var level: MemoryLevel
     var system: SystemMemory
+    /// The largest processes (what the events carry).
     var processes: [ProcessUsage]
+    /// The largest apps, summed over every process, not only `processes` (what the notification names).
+    var apps: [(app: String, footprint: UInt64)] = []
 }
 
 enum MemoryReport {
@@ -78,8 +81,8 @@ enum MemoryReport {
     }
 
     /// `CGPDFService 21 GB · Google Chrome 9.4 GB · Code 5.0 GB`
-    static func body(_ processes: [ProcessUsage]) -> String {
-        topApps(processes).map { "\($0.app) \(bytes($0.footprint))" }.joined(separator: " · ")
+    static func body(_ apps: [(app: String, footprint: UInt64)]) -> String {
+        apps.prefix(3).map { "\($0.app) \(bytes($0.footprint))" }.joined(separator: " · ")
     }
 
     static func title(_ level: MemoryLevel) -> String {

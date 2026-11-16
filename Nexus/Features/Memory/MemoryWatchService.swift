@@ -88,14 +88,14 @@ final class MemoryWatchService: ObservableObject {
         }
         if !episode {
             episode = true
-            Log.memory.warn("pressure \(snap.level.rawValue): \(MemoryReport.body(snap.processes))")
+            Log.memory.warn("pressure \(snap.level.rawValue): \(MemoryReport.body(snap.apps))")
             write(.pressure, snap)
             startTimer()
         } else {
             write(.sample, snap)
         }
-        if gate.shouldNotify(level: snap.level, topApp: MemoryReport.topApps(snap.processes, 1).first?.app, now: Date()) {
-            notifier.notify(title: MemoryReport.title(snap.level), body: MemoryReport.body(snap.processes),
+        if gate.shouldNotify(level: snap.level, topApp: snap.apps.first?.app, now: Date()) {
+            notifier.notify(title: MemoryReport.title(snap.level), body: MemoryReport.body(snap.apps),
                             sound: snap.level == .critical, category: NotificationService.memoryCategory,
                             identifier: NotificationService.memoryID)
         }

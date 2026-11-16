@@ -14,7 +14,9 @@ final class MemorySampler: @unchecked Sendable {   // confined to MemoryWatchSer
     }()
 
     func snapshot(top n: Int = 8) -> MemorySnapshot {
-        MemorySnapshot(level: Self.level(), system: Self.system(), processes: MemoryReport.top(processes(), n))
+        let all = processes()
+        return MemorySnapshot(level: Self.level(), system: Self.system(), processes: MemoryReport.top(all, n),
+                              apps: MemoryReport.topApps(all))
     }
 
     func reset() { lastCPU = [:]; lastAt = 0 }
