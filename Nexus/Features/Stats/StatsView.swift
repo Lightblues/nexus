@@ -1,10 +1,12 @@
 import SwiftUI
 import Charts
 
-/// Stats main page. Stacks Activity Calendar (year), Weekly Bar (last 7 days),
-/// Daily Timeline (selected day), and Session List (selected day).
+/// The Pomodoro page of the main window: the timer with its controls (the same ones as the
+/// menu-bar popover), then the history: database totals, Activity Calendar (year), Weekly Bar
+/// (last 7 days), Daily Timeline and Session List (selected day).
 struct StatsView: View {
     @EnvironmentObject var repo: PomodoroRepository
+    @EnvironmentObject var pomodoro: PomodoroService
 
     @State private var selectedDate: Date = Date()
     @State private var dbSummary: PomodoroRepository.DBSummary?
@@ -12,6 +14,7 @@ struct StatsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
+                timerCard
                 summaryCard
                 calendarCard
                 HStack(alignment: .top, spacing: 16) {
@@ -24,6 +27,34 @@ struct StatsView: View {
             .padding(20)
         }
         .task { dbSummary = await repo.dbSummary() }
+    }
+
+    // MARK: - Timer
+
+    private var timerCard: some View {
+        StatsCard(title: "Timer") {
+            HStack(alignment: .center, spacing: 24) {
+                ProgressRing(progress: pomodoro.progress, state: pomodoro.state,
+                             label: PomodoroService.formatMMSS(pomodoro.remaining),
+                             lineWidth: 6, fontSize: 24)
+                    .frame(width: 110, height: 110)
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Text(pomodoro.state.title)
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(pomodoro.state.color)
+                        Spacer()
+                        Text("\(repo.todayCount) today · \(PomodoroPopoverView.formatDuration(repo.todayDuration)) focused")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
+                    PomodoroSessionCard()
+                    PomodoroActionButtons()
+                }
+                .frame(maxWidth: 360)
+                Spacer(minLength: 0)
+            }
+        }
     }
 
     // MARK: - DB summary

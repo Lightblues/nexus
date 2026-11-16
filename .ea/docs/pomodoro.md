@@ -80,9 +80,9 @@ tags from the server on its first sync.
 Frame: 320 × 400. Layout:
 
 ```
-[← Back]  [Focus]  [#7]
+[Focus]           [#7] [▢]    ← ▢ opens the main window on the Pomodoro page
 ┌─────────────────────────┐
-│  7 sessions  │  2h 31m  │     ← clickable → openMain(.stats)
+│  7 sessions  │  2h 31m  │     ← clickable → main window, Pomodoro page
 └─────────────────────────┘
       ┌──────────┐
       │  --:--   │             ← Canvas progress ring
@@ -92,6 +92,11 @@ Frame: 320 × 400. Layout:
 └─────────────────────────┘
       [Start Focus]
 ```
+
+Opening the popover never activates Nexus; only the session card's editor and the main-window
+button do, because the user asked for a window there. The session card, the action buttons and
+the ring are shared with the main window (`Views/PomodoroControls.swift`), so both drive the
+service the same way; only the popover binds Return to Start Focus.
 
 Implemented with SwiftUI `VStack` + `Canvas` for the ring. Ring redraws on every tick
 but only while the popover is open — when hidden, the SwiftUI body is not invoked.
@@ -107,6 +112,13 @@ single-line `TextField`.
 
 `maxHeight: 100` on the tags scroll view (preserves the 100px scroll cap from
 Electron).
+
+## Pomodoro page (main window)
+
+The first page of the main window, sidebar label "Pomodoro" (route `stats`, palette
+"Open Pomodoro", `nexus://command/window.openStats`). On top a Timer card: the ring, the
+state, today's count and focus time, the session card and the same action buttons as the
+popover. Below it the history described next.
 
 ## Stats UI
 

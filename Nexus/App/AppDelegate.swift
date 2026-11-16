@@ -137,10 +137,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let pop = NSPopover()
         pop.behavior = .transient
         pop.animates = true
-        let root = PomodoroPopoverView()
+        let root = PomodoroPopoverView(openMainWindow: { [weak self] in
+            self?.closePopover()
+            self?.environment.mainWindow.show(route: .stats)
+        })
             .environmentObject(environment.pomodoro)
             .environmentObject(environment.pomodoroRepository)
-            .environmentObject(environment.config)
         let host = NSHostingController(rootView: root)
         host.view.frame = NSRect(x: 0, y: 0, width: 320, height: 400)
         pop.contentViewController = host
@@ -160,9 +162,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // menubar item: appear without stealing focus from the user's current app
         // (e.g. VSCode) and without dragging Nexus's MainWindow z-order to the
         // front. SwiftUI buttons inside the popover work fine without app
-        // activation. The only place we *do* need activation is when the user
-        // opens the EditSessionModal sheet (TextFields need key focus); that
-        // call lives in PomodoroPopoverView's edit button action.
+        // activation. Activation happens only when the user asks for it: the
+        // session card's editor sheet (TextFields need key focus) and the
+        // open-main-window button.
         installClickOutsideMonitor()
     }
 

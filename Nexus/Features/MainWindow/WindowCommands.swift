@@ -19,9 +19,9 @@ enum WindowCommands {
 
         registry.register(Command(
             id: "window.openStats",
-            title: "Open Statistics",
+            title: "Open Pomodoro",
             group: g,
-            keywords: ["chart", "calendar", "history"],
+            keywords: ["statistics", "stats", "chart", "calendar", "history", "focus"],
             run: { [weak mainWindow] in mainWindow?.show(route: .stats) }
         ))
 
