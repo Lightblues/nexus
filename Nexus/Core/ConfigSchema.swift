@@ -38,7 +38,6 @@ struct PomodoroConfig: Codable, Equatable {
     var shortBreakDuration: Int = 5
     var longBreakDuration: Int = 15
     var sessionsBeforeLongBreak: Int = 4
-    var showPopoverOnComplete: Bool = false
     var autoStartBreak: Bool = true
     var autoStartBreakDelay: Int = 3               // seconds
     var confettiOnComplete: Bool = true
@@ -50,7 +49,6 @@ struct PomodoroConfig: Codable, Equatable {
         shortBreakDuration = (try? c.decode(Int.self, forKey: .shortBreakDuration)) ?? 5
         longBreakDuration = (try? c.decode(Int.self, forKey: .longBreakDuration)) ?? 15
         sessionsBeforeLongBreak = (try? c.decode(Int.self, forKey: .sessionsBeforeLongBreak)) ?? 4
-        showPopoverOnComplete = (try? c.decode(Bool.self, forKey: .showPopoverOnComplete)) ?? false
         autoStartBreak = (try? c.decode(Bool.self, forKey: .autoStartBreak)) ?? true
         autoStartBreakDelay = (try? c.decode(Int.self, forKey: .autoStartBreakDelay)) ?? 3
         confettiOnComplete = (try? c.decode(Bool.self, forKey: .confettiOnComplete)) ?? true

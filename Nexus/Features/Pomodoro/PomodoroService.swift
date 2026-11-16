@@ -12,8 +12,6 @@ final class PomodoroService: ObservableObject {
     }
     @Published private(set) var remaining: TimeInterval = 0
     @Published var draftMetadata: SessionMetadata = .empty   // persisted on next start
-    /// Shows the status-item popover without activating the app; set by `AppDelegate`, which owns it.
-    var showPopover: (() -> Void)?
 
     private let repository: PomodoroRepository
     private let config: ConfigService
@@ -187,7 +185,6 @@ final class PomodoroService: ObservableObject {
         }
 
         transitionToFinished(kind: kind, completedFully: true)
-        if kind == .work && config.config.pomodoro.showPopoverOnComplete { showPopover?() }
         scheduleAutoBreakIfNeeded(prevKind: kind)
     }
 

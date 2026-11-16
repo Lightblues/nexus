@@ -45,7 +45,6 @@ struct PomodoroSettingsForm: View {
                 }
                 .padding(.leading, 22)
             }
-            Toggle("Show popover when focus completes", isOn: $draft.pomodoro.showPopoverOnComplete)
             Toggle("Trigger Raycast confetti on focus complete",
                    isOn: $draft.pomodoro.confettiOnComplete)
         }

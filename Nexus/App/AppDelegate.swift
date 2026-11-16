@@ -24,7 +24,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         installStatusItem()
         installPopover()
-        environment.pomodoro.showPopover = { [weak self] in self?.showPopover() }
         environment.pomodoro.attach(statusItem: statusItem!)
         Log.app.info("Nexus (Swift) launched, pid=\(ProcessInfo.processInfo.processIdentifier)")
     }

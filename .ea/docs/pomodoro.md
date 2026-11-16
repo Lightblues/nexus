@@ -182,6 +182,11 @@ Electron build does — open `raycast://confetti`.
 `ConfigService.$config`, so a change from Settings, sync, or `nexus config set` applies
 live.
 
-When a focus session runs to zero: `confettiOnComplete` opens Raycast's confetti without
-activating Raycast, and `showPopoverOnComplete` shows the status-item popover, which does
-not activate Nexus either. Neither applies to breaks.
+When a focus session runs to zero, `confettiOnComplete` opens Raycast's confetti without
+activating Raycast (`open -g`), so the app in front keeps the keyboard and the input method.
+It does not apply to breaks.
+
+Nothing opens UI on completion. A `showPopoverOnComplete` setting did until 2026-11-16: the
+popover's window takes key focus when shown, so it swallowed keystrokes and broke IME
+composition in whatever the user was typing in. Completion is announced by the notification and
+the confetti only; the stored key is ignored and dropped on the next settings save.
