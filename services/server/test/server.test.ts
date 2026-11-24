@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { generateKeyPairSync, sign as cryptoSign } from 'node:crypto'
 import { test } from 'node:test'
 import { MAX_BODY_BYTES, MAX_PUSH_ITEMS, OWNER, addKey, addUser, listUsers, migrate, openStore } from '../src/store.ts'
 import { KEY, READ, boot, pgliteDb, type Exported, type Pulled } from './helpers.ts'
@@ -291,5 +292,49 @@ test('a database from before users is migrated to the owner, and env keys follow
     assert.equal((await reopened.pullAll(0, '', 'rotated-key')).records.length, 1)
   } finally {
     await reopened.stop()
+  }
+})
+
+test('a signed gate assertion for the user reads /api/ like the web session, and nothing else passes', async () => {
+  const { privateKey, publicKey } = generateKeyPairSync('ed25519')
+  const x = publicKey.export({ format: 'jwk' }).x!
+  const other = generateKeyPairSync('ed25519').privateKey
+  const now = Math.floor(Date.now() / 1000)
+  const sign = (claims: Record<string, unknown>, key = privateKey) => {
+    const p = Buffer.from(JSON.stringify({ v: 1, kid: 'k', host: 'nexus.easonsi.site', owner: 'eason', device: 'iphone', iat: now, exp: now + 60, ...claims })).toString('base64url')
+    return `${p}.${cryptoSign(null, Buffer.from(p), key).toString('base64url')}`
+  }
+  const server = await boot(pgliteDb(), KEY, READ, { publicKey: x, host: 'nexus.easonsi.site', owners: ['eason'] })
+  const get = (path: string, headers: Record<string, string>) => fetch(`${server.base}${path}`, { headers })
+  try {
+    const valid = { 'x-gate-assertion': sign({}) }
+    const me = await get('/api/me', valid)
+    assert.equal(me.status, 200)
+    assert.deepEqual(await me.json().then(m => [(m as { user: string }).user, (m as { access: string }).access]), [OWNER, 'read'])
+    assert.equal((await get('/api/days', valid)).status, 200)
+    // read only, and only the web app's /api/ paths
+    assert.equal((await get('/api/sync/pull', valid)).status, 403)
+    assert.equal((await get('/api/settings', valid)).status, 403)
+    assert.equal((await get('/export/changes', valid)).status, 401)
+    // refused: forged, expired, wrong host, another owner, junk, a bare X-Gate-Owner
+    for (const headers of [
+      { 'x-gate-assertion': sign({}, other) },
+      { 'x-gate-assertion': sign({ iat: now - 300, exp: now - 240 }) },
+      { 'x-gate-assertion': sign({ host: 'etho.easonsi.site' }) },
+      { 'x-gate-assertion': sign({ owner: 'mallory' }) },
+      { 'x-gate-assertion': 'junk.junk' },
+      { 'x-gate-owner': 'eason', 'x-gate-device': 'iphone' },
+    ] as Record<string, string>[]) assert.equal((await get('/api/me', headers)).status, 401, JSON.stringify(headers))
+  } finally {
+    await server.stop()
+  }
+})
+
+test('without a gate key an assertion opens nothing', async () => {
+  const server = await boot()
+  try {
+    assert.equal((await fetch(`${server.base}/api/me`, { headers: { 'x-gate-assertion': 'a.b' } })).status, 401)
+  } finally {
+    await server.stop()
   }
 })

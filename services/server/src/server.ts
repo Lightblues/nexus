@@ -2,8 +2,9 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { extname, join } from 'node:path'
 import { isRules, openDays } from './days.ts'
-import { EXPORT_KINDS, MAX_PUSH_BYTES, MAX_PUSH_ITEMS, SESSION_DAYS, authenticate, createSession, endSession, isKind, migrate, openStore, sessionAuth, syncEnvKeys, type Access, type Db } from './store.ts'
+import { EXPORT_KINDS, MAX_PUSH_BYTES, MAX_PUSH_ITEMS, SESSION_DAYS, authenticate, createSession, endSession, isKind, migrate, OWNER, openStore, sessionAuth, syncEnvKeys, type Access, type Db } from './store.ts'
 import { dayOf, isDay } from './summary.ts'
+import { verifyGateAssertion, type GateKey } from './gate-assertion.ts'
 
 const MAX_DEVICE_LENGTH = 80
 const MAX_RANGE_DAYS = 400
@@ -26,6 +27,8 @@ export interface ServerOptions {
   tz?: string
   /** How long stored day summaries wait after a push before catching up. */
   rebuildDelayMs?: number
+  /** baton's passkey gate: a signed `X-Gate-Assertion` for one of `owners` reads `/api/` as the owner, like the web session. */
+  gate?: { publicKey: GateKey | GateKey[]; host: string; owners: string[] }
 }
 
 export async function startServer(options: ServerOptions) {
@@ -35,6 +38,7 @@ export async function startServer(options: ServerOptions) {
   const store = openStore(options.db)
   const days = openDays(options.db, store, tz, options.rebuildDelayMs)
   const web = loadWeb()
+  const passkeys = new Set<string>()
 
   const server = createServer((req, res) => {
     void onRequest(req, res).catch(error => {
@@ -70,7 +74,8 @@ export async function startServer(options: ServerOptions) {
 
     const key = bearer(req)
     // Browser sessions read only; every write goes through a key.
-    const auth = key ? await authenticate(options.db, key) : await sessionAuth(options.db, cookie(req, COOKIE)).then(a => a && { ...a, access: 'read' as Access })
+    const auth = (key ? await authenticate(options.db, key) : await sessionAuth(options.db, cookie(req, COOKIE)).then(a => a && { ...a, access: 'read' as Access }))
+      ?? gateAuth(req, url.pathname)
     if (!auth) return fail(res, 401, 'unauthorized', 'unauthorized')
     const { user, access } = auth
     const needWrite = () => fail(res, 403, 'forbidden', 'this route needs the write key')
@@ -162,6 +167,18 @@ export async function startServer(options: ServerOptions) {
     if (route === 'GET /api/sync/status') return sendJson(res, 200, await store.status(user))
 
     return fail(res, 404, 'not_found', url.pathname)
+  }
+
+  /** The web through the gate: the user's passkey stands in for the session cookie on the web app's `/api/` reads, never a key. */
+  function gateAuth(req: IncomingMessage, path: string): { user: string; access: Access } | null {
+    if (!options.gate || !path.startsWith('/api/')) return null
+    const who = verifyGateAssertion(req.headers['x-gate-assertion'], options.gate)
+    if (!who || !options.gate.owners.includes(who.owner)) return null
+    if (!passkeys.has(who.device)) {
+      passkeys.add(who.device)
+      console.log(`[nexus-server] passkey seen device=${who.device}`)
+    }
+    return { user: OWNER, access: 'read' }
   }
 
   /** A key from the form becomes a session cookie; the key itself is never stored in the browser. */

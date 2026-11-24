@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { PGlite } from '@electric-sql/pglite'
-import { startServer } from '../src/server.ts'
+import { startServer, type ServerOptions } from '../src/server.ts'
 import type { Db, PushResult, StoredRecord } from '../src/store.ts'
 
 export const KEY = 'write-key'
@@ -23,8 +23,8 @@ export function pgliteDb(): Db {
 export type Pulled = { records: StoredRecord[]; cursor: number; more: boolean }
 export type Exported = { items: { kind: string; id: string; updatedAt: number; deleted: boolean; data: unknown }[]; cursor: string; more: boolean }
 
-export async function boot(db = pgliteDb(), key = KEY, readKey = READ) {
-  const server = await startServer({ key, readKey, host: '127.0.0.1', port: 0, db, tz: 'Asia/Shanghai', rebuildDelayMs: 600_000 })
+export async function boot(db = pgliteDb(), key = KEY, readKey = READ, gate?: ServerOptions['gate']) {
+  const server = await startServer({ key, readKey, host: '127.0.0.1', port: 0, db, tz: 'Asia/Shanghai', rebuildDelayMs: 600_000, gate })
   const base = `http://127.0.0.1:${server.port}`
   const headers = (key: string) => ({ authorization: `Bearer ${key}`, 'content-type': 'application/json' })
   return {

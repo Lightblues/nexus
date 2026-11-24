@@ -27,6 +27,16 @@ days). The cookie `nexus_session` is `HttpOnly; Secure; SameSite=Lax`. A session
 was a write key: the read routes accept it, and `/api/sync/*`, `/api/settings` and the write routes do not.
 `POST /logout` deletes the session. The browser never stores the key.
 
+Behind baton's passkey gate (tx04), a request from a signed-in browser carries `X-Gate-Assertion`, Ed25519-signed by
+the gate for one host and ~60 s. `src/gate-assertion.ts` (copied unchanged from baton `packages/gate/verify/assertion.ts`)
+verifies it against the pinned `GATE_ASSERTION_PUBKEY` (the `x` of `https://nexus.easonsi.site/_gate/pubkey`, comma
+separated during a rotation; in `services/nexus.env`, never fetched at request time; unset turns this off). A valid
+assertion for `NEXUS_PUBLIC_HOST` (default `nexus.easonsi.site`) whose owner is in `NEXUS_GATE_OWNERS` (default
+`eason`) reads `/api/` as the owner, exactly like a session: so the installed iOS PWA, which keeps its own cookies
+apart from Safari's, opens after the passkey with nothing stored. It never writes, never opens `/export/` (agents and
+the CLI keep keys), and a bare `X-Gate-Owner` / `X-Gate-Device` counts for nothing (baton skills/security-baseline,
+Gate assertion).
+
 ## PWA
 
 `manifest.webmanifest` (`start_url` `/app`, standalone), icons rendered from `icons/icon.svg` by

@@ -9,6 +9,11 @@ const databaseUrl = env('NEXUS_DATABASE_URL')
 const host = env('NEXUS_HOST') || '127.0.0.1'
 const port = Number(env('NEXUS_PORT') || 33033)
 const tz = env('NEXUS_TZ') || 'Asia/Shanghai'
+// the gate's public keys, comma separated during a rotation (baton skills/security-baseline, Gate assertion); unset means off
+const gateKeys = env('GATE_ASSERTION_PUBKEY').split(',').map(k => k.trim()).filter(Boolean)
+const gate = gateKeys.length
+  ? { publicKey: gateKeys, host: env('NEXUS_PUBLIC_HOST') || 'nexus.easonsi.site', owners: (env('NEXUS_GATE_OWNERS') || 'eason').split(',').map(o => o.trim()).filter(Boolean) }
+  : undefined
 const validTz = (() => { try { new Intl.DateTimeFormat('en-US', { timeZone: tz }); return true } catch { return false } })()
 
 const problems = [
@@ -23,8 +28,8 @@ if (problems.length) {
   process.exit(1)
 }
 
-startServer({ key, readKey, host, port, tz, db: pgDb(databaseUrl) }).then(handle => {
-  console.log(`[nexus-server] http://${host}:${handle.port}`)
+startServer({ key, readKey, host, port, tz, gate, db: pgDb(databaseUrl) }).then(handle => {
+  console.log(`[nexus-server] http://${host}:${handle.port}${gate ? '' : ' (GATE_ASSERTION_PUBKEY unset: the web needs a key)'}`)
   const stop = () => void handle.close().finally(() => process.exit(0))
   process.once('SIGTERM', stop)
   process.once('SIGINT', stop)
